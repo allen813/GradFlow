@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GradeFlow AI — 成績智能辨識系統</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@300;400;600;700&display=swap');
+
+  :root {
+    --bg: #0d0f14;
+    --surface: #161a24;
+    --surface2: #1e2433;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.15);
+    --accent: #4fffb0;
+    --accent2: #00d4ff;
+    --warn: #ffb347;
+    --danger: #ff5f7e;
+    --text: #e8eaf0;
+    --muted: #7a8096;
+    --mono: 'DM Mono', monospace;
+    --sans: 'Sora', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(79,255,176,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(79,255,176,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrapper { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 0 24px 80px; }
+
+  /* Header */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 28px 0 32px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 40px;
+  }
+
+  .logo {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .logo-mark {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--accent);
+    text-transform: uppercase;
+    border: 1px solid var(--accent);
+    padding: 3px 8px;
+    border-radius: 3px;
+  }
+
+  .logo h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.5px;
+  }
+
+  .phase-badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    border: 1px solid var(--border2);
+    padding: 4px 12px;
+    border-radius: 20px;
+    letter-spacing: 1px;
+  }
+
+  /* Steps indicator */
+  .steps {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-bottom: 40px;
+  }
+
+  .step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--muted);
+    transition: color 0.3s;
+  }
+
+  .step.active { color: var(--accent); }
+  .step.done { color: var(--text); }
+
+  .step-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid currentColor;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 12px;
+    flex-shrink: 0;
+    transition: background 0.3s;
+  }
+
+  .step.active .step-num {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+    font-weight: 700;
+  }
+
+  .step.done .step-num {
+    background: rgba(79,255,176,0.15);
+    border-color: rgba(79,255,176,0.4);
+    color: var(--accent);
+  }
+
+  .step-line {
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+    margin: 0 12px;
+    min-width: 30px;
+  }
+
+  /* Panels */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    margin-bottom: 24px;
+    display: none;
+    animation: fadeUp 0.4s ease;
+  }
+
+  .panel.visible { display: block; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .panel-title {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .panel-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 2px dashed var(--border2);
+    border-radius: 12px;
+    padding: 60px 40px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .upload-zone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, rgba(79,255,176,0.04) 0%, transparent 70%);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .upload-zone:hover, .upload-zone.dragging {
+    border-color: var(--accent);
+    background: rgba(79,255,176,0.03);
+  }
+
+  .upload-zone:hover::before, .upload-zone.dragging::before { opacity: 1; }
+
+  .upload-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    display: block;
+  }
+
+  .upload-zone h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .upload-zone p {
+    font-size: 14px;
+    color: var(--muted);
+    margin-bottom: 20px;
+  }
+
+  #fileInput { display: none; }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 22px;
+    border-radius: 8px;
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #0d0f14;
+  }
+
+  .btn-primary:hover { background: #3de89a; transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  .btn-outline {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border2);
+  }
+
+  .btn-outline:hover { border-color: var(--text); background: rgba(255,255,255,0.04); }
+
+  .btn-warn {
+    background: transparent;
+    color: var(--warn);
+    border: 1px solid var(--warn);
+  }
+
+  .btn-warn:hover { background: rgba(255,179,71,0.1); }
+
+  .btn-danger {
+    background: var(--danger);
+    color: white;
+  }
+
+  .btn-excel {
+    background: #1f7a3c;
+    color: white;
+  }
+
+  .btn-excel:hover { background: #2a9a4e; transform: translateY(-1px); }
+
+  /* Config section */
+  .config-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .config-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .config-card label {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 8px;
+    font-family: var(--mono);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .config-card input, .config-card select {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 14px;
+  }
+
+  .config-card input:focus, .config-card select:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  /* Column editor */
+  .col-editor {
+    margin-top: 16px;
+  }
+
+  .col-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    animation: fadeUp 0.2s ease;
+  }
+
+  .col-row .col-idx {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    min-width: 24px;
+  }
+
+  .col-row input[type="text"] {
+    flex: 2;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: var(--text);
+    font-size: 13px;
+  }
+
+  .col-row input[type="text"]:focus { outline: none; border-color: var(--accent); }
+
+  .col-row input[type="number"] {
+    width: 70px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 13px;
+    text-align: center;
+  }
+
+  .col-row input[type="number"]:focus { outline: none; border-color: var(--accent); }
+
+  .col-row .weight-label {
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .col-row .remove-btn {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    padding: 0 4px;
+    transition: color 0.2s;
+  }
+
+  .col-row .remove-btn:hover { color: var(--danger); }
+
+  .add-col-btn {
+    background: rgba(79,255,176,0.06);
+    border: 1px dashed rgba(79,255,176,0.3);
+    border-radius: 8px;
+    padding: 10px;
+    width: 100%;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 13px;
+    font-family: var(--sans);
+    transition: all 0.2s;
+  }
+
+  .add-col-btn:hover { background: rgba(79,255,176,0.12); }
+
+  /* Preview image */
+  .preview-container {
+    position: relative;
+    margin-bottom: 20px;
+  }
+
+  #previewImg {
+    width: 100%;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    display: none;
+  }
+
+  /* Loading */
+  .loading-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+    margin: 16px 0;
+  }
+
+  .loading-bar-inner {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 3px;
+    animation: loading 1.5s ease-in-out infinite;
+  }
+
+  @keyframes loading {
+    0% { width: 0%; margin-left: 0; }
+    50% { width: 70%; margin-left: 10%; }
+    100% { width: 0%; margin-left: 100%; }
+  }
+
+  .status-msg {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+    text-align: center;
+    padding: 12px;
+  }
+
+  /* Review table */
+  .review-container {
+    overflow-x: auto;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    margin-bottom: 20px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  th {
+    background: var(--surface2);
+    padding: 10px 14px;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+  }
+
+  th:first-child, th:nth-child(2) { text-align: left; }
+
+  td {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    text-align: center;
+    vertical-align: middle;
+    position: relative;
+  }
+
+  td:first-child, td:nth-child(2) { text-align: left; }
+
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .cell-input {
+    width: 58px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 3px 6px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    text-align: center;
+    transition: all 0.2s;
+  }
+
+  .cell-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--bg);
+  }
+
+  .cell-input.low-conf {
+    color: var(--warn);
+    background: rgba(255,179,71,0.06);
+    border-color: rgba(255,179,71,0.3);
+  }
+
+  .cell-input.missing {
+    color: var(--danger);
+    background: rgba(255,95,126,0.06);
+    border-color: rgba(255,95,126,0.3);
+  }
+
+  .cell-input.slash {
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  .conf-dot {
+    position: absolute;
+    top: 6px;
+    right: 4px;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+  }
+
+  .conf-high { background: var(--accent); }
+  .conf-mid { background: var(--warn); }
+  .conf-low { background: var(--danger); }
+
+  /* Total column */
+  .total-col {
+    color: var(--accent);
+    font-weight: 600;
+    font-family: var(--mono);
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    padding: 14px 16px;
+    background: var(--surface2);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* Alert flags */
+  .flag-section {
+    background: rgba(255,179,71,0.06);
+    border: 1px solid rgba(255,179,71,0.25);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+  }
+
+  .flag-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--warn);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .flag-list { list-style: none; }
+
+  .flag-list li {
+    font-size: 13px;
+    color: var(--muted);
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    display: flex;
+    gap: 12px;
+  }
+
+  .flag-list li:last-child { border-bottom: none; }
+
+  .flag-name { color: var(--text); font-weight: 500; min-width: 80px; }
+
+  /* Action bar */
+  .action-bar {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 20px 0 0;
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+  }
+
+  .spacer { flex: 1; }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 32px;
+    right: 32px;
+    background: var(--surface2);
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    padding: 14px 20px;
+    font-size: 14px;
+    color: var(--accent);
+    z-index: 9999;
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all 0.4s cubic-bezier(0.34,1.56,0.64,1);
+    font-family: var(--mono);
+  }
+
+  .toast.show { transform: translateY(0); opacity: 1; }
+
+  /* API Key input */
+  .api-key-section {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 20px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .api-key-section input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    padding: 9px 14px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+
+  .api-key-section input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .api-key-label {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: var(--mono);
+    white-space: nowrap;
+  }
+
+  /* Missing alert */
+  .missing-alert {
+    background: rgba(255,95,126,0.06);
+    border: 1px solid rgba(255,95,126,0.25);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+  }
+
+  .missing-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--danger);
+    margin-bottom: 10px;
+  }
+
+  .missing-list { list-style: none; }
+  .missing-list li {
+    font-size: 12px;
+    font-family: var(--mono);
+    color: var(--muted);
+    padding: 3px 0;
+  }
+
+  .tag {
+    font-size: 10px;
+    font-family: var(--mono);
+    padding: 2px 7px;
+    border-radius: 3px;
+    display: inline-block;
+  }
+
+  .tag-missing { background: rgba(255,95,126,0.15); color: var(--danger); }
+  .tag-slash { background: rgba(122,128,150,0.15); color: var(--muted); }
+
+  /* Responsive */
+  @media (max-width: 700px) {
+    .config-grid { grid-template-columns: 1fr; }
+    .steps { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrapper">
+  <header>
+    <div class="logo">
+      <span class="logo-mark">AI</span>
+      <h1>GradeFlow</h1>
+    </div>
+    <span class="phase-badge">Phase 1 — OCR + Review + Export</span>
+  </header>
+
+  <!-- Steps -->
+  <div class="steps">
+    <div class="step active" id="s1"><div class="step-num">1</div><span>設定 & 上傳</span></div>
+    <div class="step-line"></div>
+    <div class="step" id="s2"><div class="step-num">2</div><span>辨識中</span></div>
+    <div class="step-line"></div>
+    <div class="step" id="s3"><div class="step-num">3</div><span>審閱 & 修正</span></div>
+    <div class="step-line"></div>
+    <div class="step" id="s4"><div class="step-num">4</div><span>匯出</span></div>
+  </div>
+
+  <!-- PANEL 1: Config + Upload -->
+  <div class="panel visible" id="panel1">
+    <div class="panel-title">Google Vision API 金鑰</div>
+
+    <div class="api-key-section">
+      <span class="api-key-label">API KEY</span>
+      <input type="password" id="apiKeyInput" placeholder="貼上你的 Google Cloud Vision API Key..." />
+      <button class="btn btn-outline" onclick="testApiKey()">測試連線</button>
+    </div>
+
+    <div class="panel-title">欄位設定</div>
+
+    <div class="config-grid">
+      <div class="config-card">
+        <label>班別名稱</label>
+        <input type="text" id="classNameInput" value="706" placeholder="如: 706, 8年A班" />
+      </div>
+      <div class="config-card">
+        <label>斜線格處理</label>
+        <select id="slashMode">
+          <option value="skip">視為免測（留空）</option>
+          <option value="zero">視為0分</option>
+          <option value="symbol">保留「/」符號</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="panel-title">科目欄位 & 加權設定</div>
+
+    <div class="col-editor">
+      <div id="colRows"></div>
+      <button class="add-col-btn" onclick="addColRow()">＋ 新增科目欄位</button>
+    </div>
+
+    <div style="margin-top:10px; font-size:12px; color:var(--muted); font-family:var(--mono);">
+      * 加權 0 = 不計入總分運算 ｜ 加權總和建議為 100
+    </div>
+
+    <div class="panel-title" style="margin-top:24px;">上傳成績表圖片</div>
+
+    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+      <span class="upload-icon">📋</span>
+      <h3>拖放或點擊上傳成績表</h3>
+      <p>支援 JPG、PNG、PDF 截圖，建議清晰正面拍攝</p>
+      <button class="btn btn-outline" onclick="event.stopPropagation(); document.getElementById('fileInput').click()">選擇檔案</button>
+      <input type="file" id="fileInput" accept="image/*" onchange="handleFile(event)" />
+    </div>
+
+    <div id="previewWrap" style="display:none; margin-top:16px;">
+      <img id="previewImg" style="width:100%; border-radius:10px; border:1px solid var(--border);" />
+    </div>
+
+    <div class="action-bar">
+      <span style="font-size:13px; color:var(--muted);">設定欄位後再上傳圖片開始辨識</span>
+      <div class="spacer"></div>
+      <button class="btn btn-primary" id="startOcrBtn" onclick="startOCR()" disabled>
+        ⚡ 開始 AI 辨識
+      </button>
+    </div>
+  </div>
+
+  <!-- PANEL 2: Loading -->
+  <div class="panel" id="panel2">
+    <div class="panel-title">Google Vision OCR 辨識中</div>
+    <div id="statusMsg" class="status-msg">正在上傳圖片至 Google Vision API...</div>
+    <div class="loading-bar"><div class="loading-bar-inner"></div></div>
+    <div id="ocrLog" style="font-family:var(--mono); font-size:12px; color:var(--muted); padding:10px; background:var(--bg); border-radius:8px; min-height:80px; white-space:pre-wrap;"></div>
+  </div>
+
+  <!-- PANEL 3: Review -->
+  <div class="panel" id="panel3">
+    <div class="panel-title">審閱 & 手動修正</div>
+
+    <!-- Flags: low confidence -->
+    <div class="flag-section" id="flagSection" style="display:none;">
+      <div class="flag-title">⚠ 低信心度欄位（請確認）</div>
+      <ul class="flag-list" id="flagList"></ul>
+    </div>
+
+    <!-- Missing alert -->
+    <div class="missing-alert" id="missingSection" style="display:none;">
+      <div class="missing-title">🔴 缺漏成績提醒</div>
+      <ul class="missing-list" id="missingList"></ul>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot conf-high"></div>高信心度</div>
+      <div class="legend-item"><div class="legend-dot conf-mid"></div>中信心度（建議確認）</div>
+      <div class="legend-item"><div class="legend-dot conf-low"></div>低信心度（請修正）</div>
+      <div class="legend-item"><span class="tag tag-slash">／</span>免測/斜線</div>
+      <div class="legend-item"><span class="tag tag-missing">空</span>缺漏</div>
+    </div>
+
+    <div class="review-container">
+      <table id="reviewTable">
+        <thead id="reviewHead"></thead>
+        <tbody id="reviewBody"></tbody>
+      </table>
+    </div>
+
+    <div class="action-bar">
+      <button class="btn btn-outline" onclick="backToUpload()">← 重新上傳</button>
+      <div class="spacer"></div>
+      <button class="btn btn-warn" onclick="autoFillMissing()">🔧 自動補齊空格</button>
+      <button class="btn btn-excel" onclick="exportExcel()">📊 匯出 Excel</button>
+    </div>
+  </div>
+
+  <!-- PANEL 4: Done -->
+  <div class="panel" id="panel4">
+    <div style="text-align:center; padding:40px 0;">
+      <div style="font-size:56px; margin-bottom:16px;">✅</div>
+      <h2 style="font-size:22px; margin-bottom:8px;">Excel 已匯出完成</h2>
+      <p style="color:var(--muted); margin-bottom:32px; font-size:14px;">檔案已下載至你的裝置，包含所有成績資料及總分計算。</p>
+      <div style="display:flex; gap:12px; justify-content:center;">
+        <button class="btn btn-outline" onclick="backToUpload()">再辨識一份</button>
+        <button class="btn btn-primary" onclick="goReview()">回到審閱</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── State ───────────────────────────────────────────────
+let uploadedFile = null;
+let uploadedBase64 = '';
+let parsedData = []; // [{seat, name, scores:[], confs:[], total}]
+let columns = [];    // [{name, weight}]
+
+// ─── Init default columns ─────────────────────────────────
+const defaultCols = [
+  {name:'第1次評量', weight:10},
+  {name:'第2次評量', weight:10},
+  {name:'第3次評量', weight:10},
+  {name:'第4次評量', weight:10},
+  {name:'期中考', weight:30},
+  {name:'期末考', weight:30},
+];
+defaultCols.forEach(c => addColRow(c.name, c.weight));
+
+function addColRow(name='', weight=10) {
+  const idx = document.getElementById('colRows').children.length + 1;
+  const row = document.createElement('div');
+  row.className = 'col-row';
+  row.dataset.idx = idx;
+  row.innerHTML = `
+    <span class="col-idx">#${String(idx).padStart(2,'0')}</span>
+    <input type="text" value="${name}" placeholder="科目名稱（如：期中考）" />
+    <span class="weight-label">加權</span>
+    <input type="number" min="0" max="100" value="${weight}" />
+    <span class="weight-label">%</span>
+    <button class="remove-btn" onclick="this.parentElement.remove(); reindexCols()">×</button>
+  `;
+  document.getElementById('colRows').appendChild(row);
+}
+
+function reindexCols() {
+  document.querySelectorAll('.col-row').forEach((r, i) => {
+    r.querySelector('.col-idx').textContent = '#' + String(i+1).padStart(2,'0');
+  });
+}
+
+function getColumns() {
+  const rows = document.querySelectorAll('.col-row');
+  return Array.from(rows).map(r => ({
+    name: r.querySelectorAll('input')[0].value || '未命名',
+    weight: parseFloat(r.querySelectorAll('input')[1].value) || 0
+  }));
+}
+
+// ─── Upload handling ──────────────────────────────────────
+const zone = document.getElementById('uploadZone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragging'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('dragging'));
+zone.addEventListener('drop', e => {
+  e.preventDefault(); zone.classList.remove('dragging');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith('image/')) processFile(f);
+});
+
+function handleFile(e) {
+  const f = e.target.files[0];
+  if (f) processFile(f);
+}
+
+function processFile(f) {
+  uploadedFile = f;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    uploadedBase64 = ev.target.result.split(',')[1];
+    document.getElementById('previewWrap').style.display = 'block';
+    document.getElementById('previewImg').src = ev.target.result;
+    document.getElementById('startOcrBtn').disabled = false;
+    showToast('圖片已載入，可以開始辨識 ✓');
+  };
+  reader.readAsDataURL(f);
+}
+
+// ─── API test ─────────────────────────────────────────────
+async function testApiKey() {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  if (!key) { showToast('請先輸入 API Key'); return; }
+  showToast('測試中...');
+  try {
+    const res = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${key}`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({requests:[{image:{content:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='},features:[{type:'TEXT_DETECTION'}]}]})
+    });
+    const d = await res.json();
+    if (d.responses) showToast('✅ API Key 有效！');
+    else showToast('❌ API Key 無效，請確認');
+  } catch(e) { showToast('❌ 連線失敗：' + e.message); }
+}
+
+// ─── OCR ─────────────────────────────────────────────────
+async function startOCR() {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  if (!key) { showToast('請先填入 Google Vision API Key'); return; }
+  if (!uploadedBase64) { showToast('請先上傳圖片'); return; }
+
+  columns = getColumns();
+  setStep(2);
+  show('panel2');
+
+  const log = document.getElementById('ocrLog');
+  const status = document.getElementById('statusMsg');
+
+  log.textContent = '';
+  function logLine(t) { log.textContent += t + '\n'; }
+
+  try {
+    status.textContent = '正在上傳圖片至 Google Vision API...';
+    logLine('► 呼叫 Google Cloud Vision API (DOCUMENT_TEXT_DETECTION)');
+
+    const res = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${key}`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({requests:[{
+        image:{content: uploadedBase64},
+        features:[{type:'DOCUMENT_TEXT_DETECTION'}],
+        imageContext:{languageHints:['zh-TW','zh','en']}
+      }]})
+    });
+
+    const data = await res.json();
+
+    if (data.error) throw new Error(data.error.message);
+    if (!data.responses || !data.responses[0]) throw new Error('API 無回應');
+
+    const resp = data.responses[0];
+    logLine('✓ OCR 回應成功');
+
+    const fullText = resp.fullTextAnnotation ? resp.fullTextAnnotation.text : '';
+    logLine('► 原始文字偵測完成，共 ' + fullText.length + ' 字');
+    logLine('');
+    logLine('原始 OCR 文字：\n' + fullText.substring(0, 800) + (fullText.length > 800 ? '...' : ''));
+
+    status.textContent = 'AI 正在解析成績表結構...';
+    logLine('\n► 呼叫 Claude AI 解析結構...');
+
+    // Parse with Claude
+    const parseRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:4000,
+        messages:[{
+          role:'user',
+          content:`你是一個成績表 OCR 解析器。以下是從成績表圖片辨識出的原始文字，請解析出每位學生的座號、姓名、和各科成績。
+
+原始 OCR 文字：
+${fullText}
+
+欄位設定（按順序）：${columns.map((c,i)=>`${i+1}.${c.name}`).join('、')}
+
+解析規則：
+1. 斜線「/」或「/」代表免測或缺交，輸出為 null
+2. 數字盡量保持原樣（100、90、80等）
+3. 如果某格模糊難以辨識，在 conf 欄位給予 0.4-0.6 的低分
+4. 高信心度給 0.9-1.0，中等給 0.65-0.85
+5. 姓名格如果是空白，整列可略過
+
+請只輸出 JSON，格式如下（不要任何其他文字）：
+{
+  "class": "班別",
+  "students": [
+    {
+      "seat": "座號數字",
+      "name": "姓名",
+      "scores": [分數或null, ...],  
+      "confs": [0.0到1.0, ...]
+    }
+  ]
+}`
+        }]
+      })
+    });
+
+    const parseData = await parseRes.json();
+    logLine('✓ AI 解析完成');
+
+    const rawContent = parseData.content[0].text;
+    logLine('► 解析結果：' + rawContent.substring(0, 200) + '...');
+
+    let parsed;
+    try {
+      const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+      parsed = JSON.parse(jsonMatch ? jsonMatch[0] : rawContent);
+    } catch(e) {
+      throw new Error('JSON 解析失敗：' + rawContent.substring(0, 100));
+    }
+
+    parsedData = parsed.students || [];
+    logLine(`✓ 共解析 ${parsedData.length} 位學生`);
+
+    status.textContent = '解析完成！';
+    setTimeout(() => {
+      buildReviewTable();
+      setStep(3);
+      show('panel3');
+    }, 800);
+
+  } catch(e) {
+    status.textContent = '❌ 發生錯誤';
+    logLine('\n錯誤：' + e.message);
+    logLine('\n請確認：\n1. API Key 正確且已啟用 Vision API\n2. 圖片清晰可讀\n3. 網路連線正常');
+  }
+}
+
+// ─── Build review table ───────────────────────────────────
+function buildReviewTable() {
+  columns = getColumns();
+  const totalWeight = columns.reduce((s,c) => s + c.weight, 0);
+
+  // Header
+  const thead = document.getElementById('reviewHead');
+  thead.innerHTML = '';
+  const hr = document.createElement('tr');
+  hr.innerHTML = '<th>座號</th><th>姓名</th>' +
+    columns.map(c => `<th>${c.name}<br><span style="font-size:10px;color:var(--accent);font-weight:400">${c.weight}%</span></th>`).join('') +
+    '<th style="color:var(--accent)">總分</th>';
+  thead.appendChild(hr);
+
+  // Body
+  const tbody = document.getElementById('reviewBody');
+  tbody.innerHTML = '';
+
+  const flags = [];
+  const missing = [];
+
+  parsedData.forEach((stu, si) => {
+    const tr = document.createElement('tr');
+    let totalScore = 0;
+    let totalWeightUsed = 0;
+
+    const cells = columns.map((col, ci) => {
+      const score = stu.scores ? stu.scores[ci] : null;
+      const conf = stu.confs ? (stu.confs[ci] || 0.8) : 0.8;
+
+      let cls = 'cell-input';
+      let confCls = 'conf-high';
+      let val = '';
+
+      if (score === null || score === undefined) {
+        // slash or missing
+        const mode = document.getElementById('slashMode').value;
+        if (mode === 'zero') {
+          val = '0';
+          cls += ' missing';
+          confCls = 'conf-low';
+        } else if (mode === 'symbol') {
+          val = '/';
+          cls += ' slash';
+          confCls = 'conf-high';
+        } else {
+          val = '';
+          cls += ' slash';
+          confCls = 'conf-high';
+        }
+      } else {
+        val = String(score);
+        if (conf < 0.6) { cls += ' low-conf'; confCls = 'conf-low'; }
+        else if (conf < 0.8) { cls += ' low-conf'; confCls = 'conf-mid'; }
+
+        const numVal = parseFloat(val);
+        if (!isNaN(numVal) && col.weight > 0) {
+          totalScore += numVal * col.weight / 100;
+          totalWeightUsed += col.weight;
+        }
+      }
+
+      if (conf < 0.7 && score !== null) {
+        flags.push({name: stu.name, seat: stu.seat, col: col.name, score: val, conf: Math.round(conf*100)});
+      }
+
+      if ((score === null || score === undefined || val === '') && !isNaN(ci)) {
+        // only flag if non-slash by context
+      }
+
+      return `<td style="position:relative">
+        <div class="conf-dot ${confCls}"></div>
+        <input class="${cls}" type="text" value="${val}"
+          data-si="${si}" data-ci="${ci}"
+          oninput="recalcRow(${si})" />
+      </td>`;
+    });
+
+    // Recalc total properly
+    const totalEl = `<td class="total-col" id="total-${si}">${totalWeightUsed > 0 ? totalScore.toFixed(1) : '—'}</td>`;
+
+    tr.innerHTML = `<td style="font-family:var(--mono);font-size:12px;color:var(--muted)">${stu.seat || '—'}</td>
+      <td style="font-weight:500">${stu.name || '—'}</td>
+      ${cells.join('')}${totalEl}`;
+    tbody.appendChild(tr);
+  });
+
+  // Flags
+  const flagSec = document.getElementById('flagSection');
+  const flagList = document.getElementById('flagList');
+  if (flags.length > 0) {
+    flagSec.style.display = 'block';
+    flagList.innerHTML = flags.map(f =>
+      `<li><span class="flag-name">${f.name}</span><span>${f.col}</span><span style="font-family:var(--mono);color:var(--warn)">${f.score}</span><span style="font-size:11px;color:var(--danger)">(信心度${f.conf}%)</span></li>`
+    ).join('');
+  } else {
+    flagSec.style.display = 'none';
+  }
+
+  // Missing
+  const missSec = document.getElementById('missingSection');
+  const missList = document.getElementById('missingList');
+  const missingItems = [];
+  parsedData.forEach(stu => {
+    if (!stu.scores) return;
+    columns.forEach((col, ci) => {
+      const s = stu.scores[ci];
+      if (s === null || s === undefined || s === '') {
+        if (col.weight > 0) {
+          missingItems.push(`座號 ${stu.seat}（${stu.name}）—— ${col.name}`);
+        }
+      }
+    });
+  });
+
+  if (missingItems.length > 0) {
+    missSec.style.display = 'block';
+    missList.innerHTML = missingItems.map(m => `<li>${m} <span class="tag tag-missing">缺漏</span></li>`).join('');
+  } else {
+    missSec.style.display = 'none';
+  }
+}
+
+function recalcRow(si) {
+  columns = getColumns();
+  const inputs = document.querySelectorAll(`input[data-si="${si}"]`);
+  let total = 0;
+  let wUsed = 0;
+  inputs.forEach((inp, ci) => {
+    const v = parseFloat(inp.value);
+    const w = columns[ci] ? columns[ci].weight : 0;
+    if (!isNaN(v) && w > 0) { total += v * w / 100; wUsed += w; }
+  });
+  const el = document.getElementById(`total-${si}`);
+  if (el) el.textContent = wUsed > 0 ? total.toFixed(1) : '—';
+}
+
+// ─── Export Excel ─────────────────────────────────────────
+function exportExcel() {
+  columns = getColumns();
+  const className = document.getElementById('classNameInput').value || '班級';
+
+  const header = ['座號', '姓名', ...columns.map(c => `${c.name}(${c.weight}%)`), '總分'];
+  const rows = [header];
+
+  parsedData.forEach((stu, si) => {
+    const inputs = document.querySelectorAll(`input[data-si="${si}"]`);
+    const scores = Array.from(inputs).map(inp => {
+      const v = inp.value.trim();
+      if (v === '' || v === '/') return v || '';
+      const n = parseFloat(v);
+      return isNaN(n) ? v : n;
+    });
+
+    let total = 0, wUsed = 0;
+    scores.forEach((s, ci) => {
+      const w = columns[ci] ? columns[ci].weight : 0;
+      if (typeof s === 'number' && w > 0) { total += s * w / 100; wUsed += w; }
+    });
+
+    rows.push([stu.seat || '', stu.name || '', ...scores, wUsed > 0 ? +total.toFixed(1) : '']);
+  });
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+
+  // Column widths
+  ws['!cols'] = [
+    {wch:6}, {wch:10},
+    ...columns.map(() => ({wch:12})),
+    {wch:8}
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, className);
+  XLSX.writeFile(wb, `GradeFlow_${className}_${new Date().toISOString().slice(0,10)}.xlsx`);
+
+  setStep(4);
+  show('panel4');
+  showToast('✅ Excel 已匯出！');
+}
+
+function autoFillMissing() {
+  document.querySelectorAll('.cell-input.missing').forEach(inp => {
+    inp.value = '0';
+    inp.classList.remove('missing');
+    inp.classList.add('low-conf');
+    const si = parseInt(inp.dataset.si);
+    recalcRow(si);
+  });
+  showToast('空格已自動填入 0，請確認後匯出');
+}
+
+// ─── Navigation ───────────────────────────────────────────
+function show(id) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('visible'));
+  document.getElementById(id).classList.add('visible');
+}
+
+function setStep(n) {
+  document.querySelectorAll('.step').forEach((s, i) => {
+    s.classList.remove('active','done');
+    if (i + 1 < n) s.classList.add('done');
+    if (i + 1 === n) s.classList.add('active');
+  });
+}
+
+function backToUpload() { setStep(1); show('panel1'); }
+function goReview() { setStep(3); show('panel3'); }
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>
