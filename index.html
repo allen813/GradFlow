@@ -939,27 +939,29 @@ function processFile(f) {
   reader.readAsDataURL(f);
 }
 
-// ─── API test ─────────────────────────────────────────────
+// ─── API test (已更換為 Gemini 測試) ─────────────────────────
 async function testApiKey() {
   const key = document.getElementById('apiKeyInput').value.trim();
   if (!key) { showToast('請先輸入 API Key'); return; }
   showToast('測試中...');
   try {
-    const res = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${key}`, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({requests:[{image:{content:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='},features:[{type:'TEXT_DETECTION'}]}]})
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: "Hello" }] }]
+      })
     });
     const d = await res.json();
-    if (d.responses) showToast('✅ API Key 有效！');
-    else showToast('❌ API Key 無效，請確認');
+    if (d.candidates) showToast('✅ Gemini API Key 有效！');
+    else showToast('❌ API Key 無效，請確認是否為 Gemini Key');
   } catch(e) { showToast('❌ 連線失敗：' + e.message); }
 }
 
-// ─── OCR ─────────────────────────────────────────────────
+// ─── OCR (重構：直接使用 Gemini 進行多模態表格辨識) ───────────────────
 async function startOCR() {
   const key = document.getElementById('apiKeyInput').value.trim();
-  if (!key) { showToast('請先填入 Google Vision API Key'); return; }
+  if (!key) { showToast('請先填入 Gemini API Key'); return; }
   if (!uploadedBase64) { showToast('請先上傳圖片'); return; }
 
   columns = getColumns();
@@ -973,92 +975,88 @@ async function startOCR() {
   function logLine(t) { log.textContent += t + '\n'; }
 
   try {
-    status.textContent = '正在上傳圖片至 Google Vision API...';
-    logLine('► 呼叫 Google Cloud Vision API (DOCUMENT_TEXT_DETECTION)');
+    status.textContent = '正在將圖片送往 Gemini 進行多模態 AI 辨識...';
+    logLine('► 準備多模態要求 (Model: gemini-2.5-flash)');
+    logLine('► 欄位設定（按順序）：' + columns.map((c,i) => `${i+1}.${c.name}`).join('、'));
 
-    const res = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${key}`, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({requests:[{
-        image:{content: uploadedBase64},
-        features:[{type:'DOCUMENT_TEXT_DETECTION'}],
-        imageContext:{languageHints:['zh-TW','zh','en']}
-      }]})
+    // 建立給 Gemini 的強大結構化 Prompt
+    const promptText = `你是一個專業的成績表 OCR 解析器與視覺語言模型。
+這裡有一張手寫的成績表圖片，請仔細辨識表格中的每一列（每一位學生）與每一格。
+
+【欄位設定（按順序）】：${columns.map((c,i) => `${i+1}.${c.name}`).join('、')}
+
+【解析與轉換規則】：
+1. 嚴格依照上面的欄位順序填入 scores 陣列中。
+2. 表格中的斜線「/」或「\\」代表免測或缺交，請一律輸出為 null。
+3. 如果某格完全是空白（缺漏），也請輸出為 null。
+4. 請判斷你對該格子數字辨識的信心度 (0.0 到 1.0)。如果字跡非常模糊、塗改或難以確定，請給予 0.4 到 0.6 的低信心度；看得很清晰的給予 0.9 到 1.0。
+5. 姓名格如果是完全無法辨識的空白雜訊，整列可略過。
+6. 請忽略照片可能存在的歪斜、反光與陰影。
+
+請嚴格遵循以下 JSON 輸出格式，不要包含任何 Markdown 標籤（如 \`\`\`json）：
+{
+  "class": "${document.getElementById('classNameInput').value || '706'}",
+  "students": [
+    {
+      "seat": "座號數字 (字串或數字)",
+      "name": "學生姓名",
+      "scores": [第一個科目分數, 第二個科目分數, ...],
+      "confs": [第一個科目信心度, 第二個科目信心度, ...]
+    }
+  ]
+}`;
+
+    // 依據官方手冊 REST 格式構建請求
+    const requestBody = {
+      contents: [{
+        parts: [
+          {
+            inlineData: {
+              mimeType: uploadedFile.type || "image/jpeg",
+              data: uploadedBase64
+            }
+          },
+          {
+            text: promptText
+          }
+        ]
+      }],
+      // 強制要求模型輸出 JSON 格式
+      generationConfig: {
+        responseMimeType: "application/json"
+      }
+    };
+
+    logLine('► 正在傳送 Base64 影像與提示詞 (要求大小小於 20MB)...');
+    
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody)
     });
 
     const data = await res.json();
 
     if (data.error) throw new Error(data.error.message);
-    if (!data.responses || !data.responses[0]) throw new Error('API 無回應');
+    if (!data.candidates || !data.candidates[0]) throw new Error('Gemini API 無回應，請檢查金鑰或配額。');
 
-    const resp = data.responses[0];
-    logLine('✓ OCR 回應成功');
-
-    const fullText = resp.fullTextAnnotation ? resp.fullTextAnnotation.text : '';
-    logLine('► 原始文字偵測完成，共 ' + fullText.length + ' 字');
-    logLine('');
-    logLine('原始 OCR 文字：\n' + fullText.substring(0, 800) + (fullText.length > 800 ? '...' : ''));
-
-    status.textContent = 'AI 正在解析成績表結構...';
-    logLine('\n► 呼叫 Claude AI 解析結構...');
-
-    // Parse with Claude
-    const parseRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:4000,
-        messages:[{
-          role:'user',
-          content:`你是一個成績表 OCR 解析器。以下是從成績表圖片辨識出的原始文字，請解析出每位學生的座號、姓名、和各科成績。
-
-原始 OCR 文字：
-${fullText}
-
-欄位設定（按順序）：${columns.map((c,i)=>`${i+1}.${c.name}`).join('、')}
-
-解析規則：
-1. 斜線「/」或「/」代表免測或缺交，輸出為 null
-2. 數字盡量保持原樣（100、90、80等）
-3. 如果某格模糊難以辨識，在 conf 欄位給予 0.4-0.6 的低分
-4. 高信心度給 0.9-1.0，中等給 0.65-0.85
-5. 姓名格如果是空白，整列可略過
-
-請只輸出 JSON，格式如下（不要任何其他文字）：
-{
-  "class": "班別",
-  "students": [
-    {
-      "seat": "座號數字",
-      "name": "姓名",
-      "scores": [分數或null, ...],  
-      "confs": [0.0到1.0, ...]
-    }
-  ]
-}`
-        }]
-      })
-    });
-
-    const parseData = await parseRes.json();
-    logLine('✓ AI 解析完成');
-
-    const rawContent = parseData.content[0].text;
-    logLine('► 解析結果：' + rawContent.substring(0, 200) + '...');
+    logLine('✓ Gemini 辨識完成！');
+    
+    // 取出 Gemini 回傳的純文字（因為設定了 responseMimeType，內容保證是 JSON 字串）
+    const rawJsonText = data.candidates[0].content.parts[0].text;
+    logLine('\n► 收到結構化數據：\n' + rawJsonText.substring(0, 500) + '...');
 
     let parsed;
     try {
-      const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
-      parsed = JSON.parse(jsonMatch ? jsonMatch[0] : rawContent);
+      parsed = JSON.parse(rawJsonText);
     } catch(e) {
-      throw new Error('JSON 解析失敗：' + rawContent.substring(0, 100));
+      throw new Error('JSON 解析失敗，原始文字為：' + rawJsonText.substring(0, 100));
     }
 
     parsedData = parsed.students || [];
-    logLine(`✓ 共解析 ${parsedData.length} 位學生`);
+    logLine(`✓ 成功解析出 ${parsedData.length} 位學生的成績資料`);
 
-    status.textContent = '解析完成！';
+    status.textContent = '結構化對齊完成！';
     setTimeout(() => {
       buildReviewTable();
       setStep(3);
@@ -1067,8 +1065,11 @@ ${fullText}
 
   } catch(e) {
     status.textContent = '❌ 發生錯誤';
-    logLine('\n錯誤：' + e.message);
-    logLine('\n請確認：\n1. API Key 正確且已啟用 Vision API\n2. 圖片清晰可讀\n3. 網路連線正常');
+    logLine('\n錯誤訊息：' + e.message);
+    logLine('\n疑難排解建議：');
+    logLine('1. 請確認你的 API Key 是在「Google AI Studio」申請的，而非 GCP 內部的金鑰。');
+    logLine('2. 請確認上傳的圖片格式 (MIME 類型) 正常。');
+    logLine('3. 如果錯誤代碼為 429，代表超過了每分鐘 15 次的免費頻率限制，請稍等一分鐘再試。');
   }
 }
 
