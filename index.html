@@ -208,12 +208,25 @@ tr:hover td{background:rgba(255,255,255,0.02);}
 
 <!-- ══ STAGE 1: API Key + Upload ══ -->
 <div class="panel visible" id="panel1">
-  <div class="panel-title">Gemini API 金鑰</div>
+  <div class="panel-title">Gemini API 金鑰 &amp; 模型選擇</div>
   <div class="api-row">
     <span class="api-label">API KEY</span>
     <input type="password" id="apiKeyInput" placeholder="貼上你的 Google Gemini API Key..." autocomplete="off"/>
     <button class="btn btn-outline" onclick="testApiKey()">測試連線</button>
     <span id="apiStatus" class="api-status" style="display:none;"></span>
+  </div>
+  <div class="api-row" style="margin-bottom:0;">
+    <span class="api-label">模型</span>
+    <select id="modelSelect" onchange="updateModelInfo()" style="flex:1;background:var(--bg);border:1px solid var(--border2);border-radius:6px;padding:8px 12px;color:var(--text);font-family:var(--mono);font-size:13px;cursor:pointer;">
+      <option value="gemini-2.5-flash">Gemini 2.5 Flash（推薦・快速・低成本）</option>
+      <option value="gemini-2.5-pro">Gemini 2.5 Pro（最高精度・較慢）</option>
+      <option value="gemini-2.0-flash">Gemini 2.0 Flash（穩定・備用選項）</option>
+      <option value="gemini-1.5-pro">Gemini 1.5 Pro（舊版・穩定）</option>
+      <option value="gemini-1.5-flash">Gemini 1.5 Flash（舊版・快速）</option>
+    </select>
+  </div>
+  <div style="font-size:11px;color:var(--muted);font-family:var(--mono);padding:7px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;margin-bottom:18px;line-height:1.8;" id="modelInfoBox">
+    ℹ 若遇到「高流量」錯誤，系統將自動重試最多 3 次（間隔 8-20 秒）。或切換至 <span style="color:var(--accent)">Gemini 2.0 Flash / 1.5 Pro</span> 降低排隊壓力。
   </div>
 
   <div class="panel-title">班級資訊</div>
@@ -378,24 +391,66 @@ function processFile(f){
 }
 
 // ─── API Test (Gemini) ──────────────────────────────────────────────
+// ─── Model helpers ───────────────────────────────────────────────────
+function getModel(){ return document.getElementById('modelSelect').value; }
+function updateModelInfo(){}  // placeholder for future use
+
+// ─── Gemini call with retry on high-demand errors ────────────────────
+async function geminiCall(key, model, body, logLine, maxRetries){
+  maxRetries = maxRetries||3;
+  let lastErr;
+  for(let attempt=1; attempt<=maxRetries; attempt++){
+    try{
+      if(attempt>1){
+        const waitSec = attempt===2 ? 8 : 20;
+        if(logLine) logLine('⏳ 第 '+attempt+' 次重試，等待 '+waitSec+' 秒... (高流量排隊中)');
+        await new Promise(r=>setTimeout(r, waitSec*1000));
+      }
+      const res = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent?key='+key,
+        {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}
+      );
+      const data = await res.json();
+      if(data.error){
+        const code = data.error.code||0;
+        const msg = data.error.message||'';
+        const isOverload = code===503||code===429||msg.toLowerCase().indexOf('high demand')>=0||msg.toLowerCase().indexOf('overload')>=0||msg.toLowerCase().indexOf('quota')>=0;
+        if(isOverload && attempt<maxRetries){
+          if(logLine) logLine('⚠ 伺服器高流量 ('+code+')，自動重試...');
+          lastErr = new Error(msg);
+          continue;
+        }
+        throw new Error(msg);
+      }
+      return data;
+    }catch(e){
+      lastErr = e;
+      const isRetryable = e.message.indexOf('high demand')>=0||e.message.indexOf('overload')>=0||e.message.indexOf('503')>=0||e.message.indexOf('429')>=0;
+      if(attempt<maxRetries && isRetryable){
+        if(logLine) logLine('⚠ 連線錯誤，準備重試...');
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastErr;
+}
+
 async function testApiKey(){
   const key=document.getElementById('apiKeyInput').value.trim();
   if(!key){showToast('請先輸入 API Key');return;}
   showToast('測試中...');
   const st=document.getElementById('apiStatus');
   st.style.display='none';
+  const model=getModel();
   try{
-    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({contents:[{parts:[{text:'Hello'}]}]})
-    });
-    const d=await res.json();
-    if(d.candidates){
+    const data=await geminiCall(key, model, {contents:[{parts:[{text:'Hello'}]}]}, null, 1);
+    if(data.candidates){
       st.textContent='✓ 有效';st.className='api-status api-ok';st.style.display='inline-block';
       showToast('✅ Gemini API Key 有效！');
     }else{
       st.textContent='✗ 無效';st.className='api-status api-fail';st.style.display='inline-block';
-      showToast('❌ Key 無效：'+JSON.stringify(d.error||d));
+      showToast('❌ Key 無效：'+JSON.stringify(data.error||data));
     }
   }catch(e){
     st.textContent='✗ 失敗';st.className='api-status api-fail';st.style.display='inline-block';
@@ -403,31 +458,36 @@ async function testApiKey(){
   }
 }
 
-// ─── Go to Stage 2: quick column scan ───────────────────────────────
+// ─── Go to Stage 2: detect columns with count ───────────────────────
 async function goStage2(){
   const key=document.getElementById('apiKeyInput').value.trim();
   if(!key){showToast('請先填入 Gemini API Key');return;}
   if(!uploadedBase64){showToast('請先上傳圖片');return;}
   setStep(2);show('panel2');
   document.getElementById('detectedCols').innerHTML='<span style="font-size:12px;color:var(--muted);font-family:var(--mono);">偵測欄位中...</span>';
+  const model=getModel();
   try{
-    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({contents:[{parts:[
+    const data=await geminiCall(key, model, {
+      contents:[{parts:[
         {inline_data:{mime_type:uploadedMime,data:uploadedBase64}},
-        {text:`請只看這張成績表圖片的標題列（第一行/標頭行），列出所有科目/考試欄位名稱（不含座號、姓名）。
-直接輸出 JSON，不含任何 Markdown 標記：{"columns":["欄位1","欄位2",...]}`}
-      ]}]})
-    });
-    const d=await res.json();
-    const txt=d.candidates?.[0]?.content?.parts?.[0]?.text||'{}';
+        {text:'請仔細觀察這張成績表圖片的「標題列」（最上方的欄位名稱行）。\n你的任務：\n1. 精確數出標題列中共有幾個「成績欄位」（不含座號、姓名兩欄）。\n2. 列出每個欄位的名稱（若文字模糊就用「成績N」替代）。\n重要：圖片中通常有15-25個欄位，請仔細從左到右一一數清楚，不要遺漏。\n請同時在 class 欄位填入從圖片左上角或標題看到的班級編號（如 803、706 等）。\n直接輸出 JSON，不含任何 Markdown 標記：\n{"columns":["欄位1","欄位2",...],"count":數字,"class":"班級編號"}'}
+      ]}],
+      generationConfig:{temperature:0.05}
+    }, null, 3);
+    const txt=data.candidates?.[0]?.content?.parts?.[0]?.text||'{}';
     const m=txt.match(/\{[\s\S]*\}/);
     const parsed=JSON.parse(m?m[0]:'{"columns":[]}');
     detectedColumns=(parsed.columns||[]).filter(c=>c&&c.trim());
-    if(detectedColumns.length===0){
-      // fallback: ask user to set manually
-      detectedColumns=['成績1','成績2','成績3'];
+    const reportedCount=parsed.count||0;
+    if(reportedCount>detectedColumns.length){
+      for(let i=detectedColumns.length+1;i<=reportedCount;i++) detectedColumns.push('成績'+i);
     }
+    // Auto-fill class name if detected and field is still default
+    if(parsed.class&&parsed.class.trim()){
+      const cn=document.getElementById('classNameInput');
+      if(cn.value==='706'||cn.value===''||cn.value==='班級') cn.value=parsed.class.trim();
+    }
+    if(detectedColumns.length===0) detectedColumns=['成績1','成績2','成績3'];
     renderDetectedCols();
     buildWeightRows();
   }catch(e){
@@ -439,7 +499,8 @@ async function goStage2(){
 
 function renderDetectedCols(){
   const el=document.getElementById('detectedCols');
-  el.innerHTML=detectedColumns.map(c=>`<span class="col-chip selected">${c}</span>`).join('');
+  el.innerHTML='<span style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-right:8px;border:1px solid var(--border2);border-radius:4px;padding:3px 8px;">共 '+detectedColumns.length+' 欄</span>'
+    +detectedColumns.map(c=>'<span class="col-chip selected">'+c+'</span>').join('');
 }
 
 // ─── Weight editor ───────────────────────────────────────────────────
@@ -525,6 +586,7 @@ async function startOCR(){
   }
   const key=document.getElementById('apiKeyInput').value.trim();
   if(!key){showToast('請先填入 Gemini API Key');return;}
+  const model=getModel();
   setStep(3);show('panel3');
   const log=document.getElementById('ocrLog');
   const status=document.getElementById('statusMsg');
@@ -532,47 +594,22 @@ async function startOCR(){
   const logLine=t=>{log.textContent+=t+'\n';log.scrollTop=log.scrollHeight;};
 
   const columns=scoringMode==='weight'?getColumnsFromEditor():detectedColumns.map(n=>({name:n,weight:0}));
+  const numCols=columns.length;
 
   try{
     status.textContent='正在將圖片送往 Gemini 進行多模態 AI 辨識...';
-    logLine('► Model: gemini-2.5-flash（多模態）');
-    logLine('► 欄位：'+columns.map((c,i)=>`${i+1}.${c.name}`).join('、'));
+    logLine('► Model: '+model+'（多模態）');
+    logLine('► 欄位數：'+numCols+'　欄位：'+columns.map((c,i)=>(i+1)+'.'+c.name).join('、'));
 
-    const promptText=`你是一個專業的成績表 OCR 解析器。
-請仔細辨識這張手寫成績表圖片中的每一列（每一位學生）與每一格數字。
+    const promptText='你是一個專業的成績表 OCR 解析器。\n請仔細辨識這張手寫成績表圖片中的每一列（每一位學生）與每一格數字。\n\n【欄位數量】：本表格共有 '+numCols+' 個成績欄位（已確認），每位學生的 scores 陣列長度必須恰好等於 '+numCols+'。\n【欄位順序】：'+columns.map((c,i)=>(i+1)+'.'+c.name).join('、')+'\n\n【重要規則】：\n1. 嚴格依照欄位順序填入 scores 陣列，陣列長度必須等於 '+numCols+'。\n2. 若某欄確實空白或找不到，填 null，不可縮短陣列長度。\n3. 斜線「/」或「\\」代表免測/缺交，輸出 null。\n4. confs 陣列長度也必須等於 '+numCols+'，每個值對應同位置的 scores。\n5. 信心度評分原則（請誠實評估每一格）：\n   - 0.92–1.0：字跡非常清晰，完全確定\n   - 0.75–0.91：大致清晰，但有輕微模糊\n   - 0.55–0.74：字跡模糊、有塗改、或數字難以確定\n   - 0.3–0.54：非常模糊或幾乎看不清楚\n   請不要對所有格子都給高信心度，手寫表格必然有部分模糊格。\n6. 姓名完全無法辨識的列可略過。\n\n請嚴格只輸出 JSON，不含任何 Markdown 標記（不要 ```json）：\n{\n  "class":"'+( document.getElementById('classNameInput').value||'班級' )+'",\n  "students":[\n    {"seat":"座號","name":"姓名","scores":[...共'+numCols+'個...],"confs":[...共'+numCols+'個...]}\n  ]\n}';
 
-【欄位順序】：${columns.map((c,i)=>`${i+1}.${c.name}`).join('、')}
-
-【重要規則】：
-1. 嚴格依照欄位順序填入 scores 陣列。
-2. 斜線「/」或「\\」代表免測/缺交，輸出 null。
-3. 完全空白格也輸出 null。
-4. 信心度評分原則（非常重要，請誠實評估）：
-   - 0.9–1.0：字跡非常清晰，完全確定
-   - 0.7–0.85：大致清晰，但有輕微模糊或可能是近似值
-   - 0.5–0.65：字跡模糊、有塗改、或數字難以確定（如100與100、90與9○）
-   - 0.3–0.45：非常模糊或幾乎看不清楚
-   請不要對所有格子都給高信心度，手寫表格必然有部分模糊格。
-5. 姓名完全無法辨識的列可略過。
-
-請嚴格只輸出 JSON，不含任何 Markdown 標記（不要 \`\`\`json）：
-{
-  "class":"${document.getElementById('classNameInput').value||'班級'}",
-  "students":[
-    {"seat":"座號","name":"姓名","scores":[...],"confs":[...]}
-  ]
-}`;
-
-    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({contents:[{parts:[
+    const data = await geminiCall(key, model, {
+      contents:[{parts:[
         {inline_data:{mime_type:uploadedMime,data:uploadedBase64}},
         {text:promptText}
       ]}],
-      generationConfig:{temperature:0.1,topP:0.8}})
-    });
-    const data=await res.json();
-    if(data.error)throw new Error(data.error.message);
+      generationConfig:{temperature:0.05,topP:0.9}
+    }, logLine, 3);
     const rawTxt=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
     logLine('✓ Gemini 回應完成（'+rawTxt.length+' chars）');
     logLine('\n原始輸出前200字：\n'+rawTxt.substring(0,200)+'...');
@@ -584,7 +621,16 @@ async function startOCR(){
     }catch(e){throw new Error('JSON 解析失敗：'+rawTxt.substring(0,120));}
 
     parsedData=parsed.students||[];
-    logLine('\n✓ 解析完成，共 '+parsedData.length+' 位學生');
+    // Validate: ensure every student has exactly numCols scores and confs
+    parsedData.forEach(stu=>{
+      if(!Array.isArray(stu.scores)) stu.scores=[];
+      if(!Array.isArray(stu.confs)) stu.confs=[];
+      while(stu.scores.length<numCols) stu.scores.push(null);
+      while(stu.confs.length<numCols) stu.confs.push(0.75);
+      stu.scores=stu.scores.slice(0,numCols);
+      stu.confs=stu.confs.slice(0,numCols);
+    });
+    logLine('\n✓ 解析完成，共 '+parsedData.length+' 位學生，每人 '+numCols+' 欄成績');
 
     // If text mode, compute totals via Claude
     if(scoringMode==='text'){
@@ -602,7 +648,7 @@ async function startOCR(){
   }catch(e){
     status.textContent='❌ 發生錯誤';
     logLine('\n錯誤：'+e.message);
-    logLine('\n請確認：\n1. Gemini API Key 正確且已啟用\n2. 圖片清晰\n3. 網路連線正常');
+    logLine('\n請確認：\n1. Gemini API Key 正確且已啟用\n2. 圖片清晰\n3. 若持續高流量，請切換模型重試（推薦: Gemini 2.0 Flash）');
   }
 }
 
@@ -674,7 +720,15 @@ function buildReviewTable(columns){
       if((raw===null||raw===undefined)&&col.weight>0){
         missingItems.push({name:stu.name,seat:stu.seat,col:col.name});
       }
-      return `<td><input class="${cls}" type="text" value="${val}" data-si="${si}" data-ci="${ci}" oninput="recalcRow(${si})"/></td>`;
+      // Confidence badge
+      let confCls='', confLabel='';
+      if(raw!==null&&raw!==undefined){
+        if(conf>=0.85){confCls='high';confLabel=Math.round(conf*100)+'%';}
+        else if(conf>=0.65){confCls='mid';confLabel=Math.round(conf*100)+'%';}
+        else{confCls='low';confLabel=Math.round(conf*100)+'%';}
+      }
+      const badge=confLabel?`<span style="display:block;font-size:9px;font-family:var(--mono);border-radius:2px;padding:0 2px;line-height:1.5;color:${confCls==='high'?'rgba(79,255,176,0.7)':confCls==='mid'?'rgba(255,179,71,0.9)':'rgba(255,95,126,0.9)'};background:${confCls==='high'?'rgba(79,255,176,0.06)':confCls==='mid'?'rgba(255,179,71,0.08)':'rgba(255,95,126,0.10)'};">${confLabel}</span>`:'';
+      return `<td><div style="display:flex;flex-direction:column;align-items:center;"><input class="${cls}" type="text" value="${val}" data-si="${si}" data-ci="${ci}" oninput="recalcRow(${si})"/>${badge}</div></td>`;
     });
     const total=stu._textTotal!==undefined?stu._textTotal:(weightUsed>0?+totalScore.toFixed(1):'—');
     tr.innerHTML=`<td class="td-seat">${stu.seat||'—'}</td><td class="td-name" title="${stu.name||''}">${stu.name||'—'}</td>`+cells.join('')+`<td class="td-total" id="total-${si}">${total}</td>`;
