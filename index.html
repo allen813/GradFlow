@@ -3,1291 +3,760 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GradeFlow AI — 成績智能辨識系統</title>
+<title>GradeFlow AI</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@300;400;600;700&display=swap');
-
-  :root {
-    --bg: #0d0f14;
-    --surface: #161a24;
-    --surface2: #1e2433;
-    --border: rgba(255,255,255,0.08);
-    --border2: rgba(255,255,255,0.15);
-    --accent: #4fffb0;
-    --accent2: #00d4ff;
-    --warn: #ffb347;
-    --danger: #ff5f7e;
-    --text: #e8eaf0;
-    --muted: #7a8096;
-    --mono: 'DM Mono', monospace;
-    --sans: 'Sora', sans-serif;
-  }
-
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--sans);
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
-
-  /* Grid background */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background-image:
-      linear-gradient(rgba(79,255,176,0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(79,255,176,0.03) 1px, transparent 1px);
-    background-size: 40px 40px;
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  .wrapper { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 0 24px 80px; }
-
-  /* Header */
-  header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 28px 0 32px;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 40px;
-  }
-
-  .logo {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-  }
-
-  .logo-mark {
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 3px;
-    color: var(--accent);
-    text-transform: uppercase;
-    border: 1px solid var(--accent);
-    padding: 3px 8px;
-    border-radius: 3px;
-  }
-
-  .logo h1 {
-    font-size: 22px;
-    font-weight: 700;
-    color: var(--text);
-    letter-spacing: -0.5px;
-  }
-
-  .phase-badge {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--muted);
-    border: 1px solid var(--border2);
-    padding: 4px 12px;
-    border-radius: 20px;
-    letter-spacing: 1px;
-  }
-
-  /* Steps indicator */
-  .steps {
-    display: flex;
-    align-items: center;
-    gap: 0;
-    margin-bottom: 40px;
-  }
-
-  .step {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 13px;
-    color: var(--muted);
-    transition: color 0.3s;
-  }
-
-  .step.active { color: var(--accent); }
-  .step.done { color: var(--text); }
-
-  .step-num {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    border: 1px solid currentColor;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: var(--mono);
-    font-size: 12px;
-    flex-shrink: 0;
-    transition: background 0.3s;
-  }
-
-  .step.active .step-num {
-    background: var(--accent);
-    color: var(--bg);
-    border-color: var(--accent);
-    font-weight: 700;
-  }
-
-  .step.done .step-num {
-    background: rgba(79,255,176,0.15);
-    border-color: rgba(79,255,176,0.4);
-    color: var(--accent);
-  }
-
-  .step-line {
-    flex: 1;
-    height: 1px;
-    background: var(--border);
-    margin: 0 12px;
-    min-width: 30px;
-  }
-
-  /* Panels */
-  .panel {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 32px;
-    margin-bottom: 24px;
-    display: none;
-    animation: fadeUp 0.4s ease;
-  }
-
-  .panel.visible { display: block; }
-
-  @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(16px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  .panel-title {
-    font-size: 14px;
-    font-weight: 600;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 20px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .panel-title::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--border);
-  }
-
-  /* Upload zone */
-  .upload-zone {
-    border: 2px dashed var(--border2);
-    border-radius: 12px;
-    padding: 60px 40px;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.3s;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .upload-zone::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(ellipse at center, rgba(79,255,176,0.04) 0%, transparent 70%);
-    opacity: 0;
-    transition: opacity 0.3s;
-  }
-
-  .upload-zone:hover, .upload-zone.dragging {
-    border-color: var(--accent);
-    background: rgba(79,255,176,0.03);
-  }
-
-  .upload-zone:hover::before, .upload-zone.dragging::before { opacity: 1; }
-
-  .upload-icon {
-    font-size: 48px;
-    margin-bottom: 16px;
-    display: block;
-  }
-
-  .upload-zone h3 {
-    font-size: 18px;
-    font-weight: 600;
-    margin-bottom: 8px;
-  }
-
-  .upload-zone p {
-    font-size: 14px;
-    color: var(--muted);
-    margin-bottom: 20px;
-  }
-
-  #fileInput { display: none; }
-
-  /* Buttons */
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 22px;
-    border-radius: 8px;
-    font-family: var(--sans);
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-    border: none;
-  }
-
-  .btn-primary {
-    background: var(--accent);
-    color: #0d0f14;
-  }
-
-  .btn-primary:hover { background: #3de89a; transform: translateY(-1px); }
-  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-
-  .btn-outline {
-    background: transparent;
-    color: var(--text);
-    border: 1px solid var(--border2);
-  }
-
-  .btn-outline:hover { border-color: var(--text); background: rgba(255,255,255,0.04); }
-
-  .btn-warn {
-    background: transparent;
-    color: var(--warn);
-    border: 1px solid var(--warn);
-  }
-
-  .btn-warn:hover { background: rgba(255,179,71,0.1); }
-
-  .btn-danger {
-    background: var(--danger);
-    color: white;
-  }
-
-  .btn-excel {
-    background: #1f7a3c;
-    color: white;
-  }
-
-  .btn-excel:hover { background: #2a9a4e; transform: translateY(-1px); }
-
-  /* Config section */
-  .config-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    margin-bottom: 20px;
-  }
-
-  .config-card {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 16px;
-  }
-
-  .config-card label {
-    display: block;
-    font-size: 12px;
-    color: var(--muted);
-    margin-bottom: 8px;
-    font-family: var(--mono);
-    letter-spacing: 1px;
-    text-transform: uppercase;
-  }
-
-  .config-card input, .config-card select {
-    width: 100%;
-    background: var(--bg);
-    border: 1px solid var(--border2);
-    border-radius: 6px;
-    padding: 8px 12px;
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 14px;
-  }
-
-  .config-card input:focus, .config-card select:focus {
-    outline: none;
-    border-color: var(--accent);
-  }
-
-  /* Column editor */
-  .col-editor {
-    margin-top: 16px;
-  }
-
-  .col-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 8px;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 14px;
-    animation: fadeUp 0.2s ease;
-  }
-
-  .col-row .col-idx {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--muted);
-    min-width: 24px;
-  }
-
-  .col-row input[type="text"] {
-    flex: 2;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 6px 10px;
-    color: var(--text);
-    font-size: 13px;
-  }
-
-  .col-row input[type="text"]:focus { outline: none; border-color: var(--accent); }
-
-  .col-row input[type="number"] {
-    width: 70px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 6px 10px;
-    color: var(--accent);
-    font-family: var(--mono);
-    font-size: 13px;
-    text-align: center;
-  }
-
-  .col-row input[type="number"]:focus { outline: none; border-color: var(--accent); }
-
-  .col-row .weight-label {
-    font-size: 12px;
-    color: var(--muted);
-    white-space: nowrap;
-  }
-
-  .col-row .remove-btn {
-    background: none;
-    border: none;
-    color: var(--muted);
-    cursor: pointer;
-    font-size: 18px;
-    line-height: 1;
-    padding: 0 4px;
-    transition: color 0.2s;
-  }
-
-  .col-row .remove-btn:hover { color: var(--danger); }
-
-  .add-col-btn {
-    background: rgba(79,255,176,0.06);
-    border: 1px dashed rgba(79,255,176,0.3);
-    border-radius: 8px;
-    padding: 10px;
-    width: 100%;
-    color: var(--accent);
-    cursor: pointer;
-    font-size: 13px;
-    font-family: var(--sans);
-    transition: all 0.2s;
-  }
-
-  .add-col-btn:hover { background: rgba(79,255,176,0.12); }
-
-  /* Preview image */
-  .preview-container {
-    position: relative;
-    margin-bottom: 20px;
-  }
-
-  #previewImg {
-    width: 100%;
-    border-radius: 10px;
-    border: 1px solid var(--border);
-    display: none;
-  }
-
-  /* Loading */
-  .loading-bar {
-    height: 3px;
-    background: var(--border);
-    border-radius: 3px;
-    overflow: hidden;
-    margin: 16px 0;
-  }
-
-  .loading-bar-inner {
-    height: 100%;
-    background: linear-gradient(90deg, var(--accent), var(--accent2));
-    border-radius: 3px;
-    animation: loading 1.5s ease-in-out infinite;
-  }
-
-  @keyframes loading {
-    0% { width: 0%; margin-left: 0; }
-    50% { width: 70%; margin-left: 10%; }
-    100% { width: 0%; margin-left: 100%; }
-  }
-
-  .status-msg {
-    font-family: var(--mono);
-    font-size: 13px;
-    color: var(--accent);
-    text-align: center;
-    padding: 12px;
-  }
-
-  /* Review table */
-  .review-container {
-    overflow-x: auto;
-    border-radius: 10px;
-    border: 1px solid var(--border);
-    margin-bottom: 20px;
-  }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-  }
-
-  th {
-    background: var(--surface2);
-    padding: 10px 14px;
-    text-align: center;
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 1px;
-    color: var(--muted);
-    border-bottom: 1px solid var(--border);
-    white-space: nowrap;
-    position: sticky;
-    top: 0;
-  }
-
-  th:first-child, th:nth-child(2) { text-align: left; }
-
-  td {
-    padding: 8px 14px;
-    border-bottom: 1px solid var(--border);
-    text-align: center;
-    vertical-align: middle;
-    position: relative;
-  }
-
-  td:first-child, td:nth-child(2) { text-align: left; }
-
-  tr:last-child td { border-bottom: none; }
-  tr:hover td { background: rgba(255,255,255,0.02); }
-
-  .cell-input {
-    width: 58px;
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: 4px;
-    padding: 3px 6px;
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 13px;
-    text-align: center;
-    transition: all 0.2s;
-  }
-
-  .cell-input:focus {
-    outline: none;
-    border-color: var(--accent);
-    background: var(--bg);
-  }
-
-  .cell-input.low-conf {
-    color: var(--warn);
-    background: rgba(255,179,71,0.06);
-    border-color: rgba(255,179,71,0.3);
-  }
-
-  .cell-input.missing {
-    color: var(--danger);
-    background: rgba(255,95,126,0.06);
-    border-color: rgba(255,95,126,0.3);
-  }
-
-  .cell-input.slash {
-    color: var(--muted);
-    font-style: italic;
-  }
-
-  .conf-dot {
-    position: absolute;
-    top: 6px;
-    right: 4px;
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-  }
-
-  .conf-high { background: var(--accent); }
-  .conf-mid { background: var(--warn); }
-  .conf-low { background: var(--danger); }
-
-  /* Total column */
-  .total-col {
-    color: var(--accent);
-    font-weight: 600;
-    font-family: var(--mono);
-  }
-
-  /* Legend */
-  .legend {
-    display: flex;
-    gap: 20px;
-    flex-wrap: wrap;
-    margin-bottom: 20px;
-    padding: 14px 16px;
-    background: var(--surface2);
-    border-radius: 8px;
-    border: 1px solid var(--border);
-  }
-
-  .legend-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 12px;
-    color: var(--muted);
-  }
-
-  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
-
-  /* Alert flags */
-  .flag-section {
-    background: rgba(255,179,71,0.06);
-    border: 1px solid rgba(255,179,71,0.25);
-    border-radius: 10px;
-    padding: 16px 20px;
-    margin-bottom: 20px;
-  }
-
-  .flag-title {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--warn);
-    margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .flag-list { list-style: none; }
-
-  .flag-list li {
-    font-size: 13px;
-    color: var(--muted);
-    padding: 4px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.04);
-    display: flex;
-    gap: 12px;
-  }
-
-  .flag-list li:last-child { border-bottom: none; }
-
-  .flag-name { color: var(--text); font-weight: 500; min-width: 80px; }
-
-  /* Action bar */
-  .action-bar {
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-    align-items: center;
-    padding: 20px 0 0;
-    border-top: 1px solid var(--border);
-    margin-top: 8px;
-  }
-
-  .spacer { flex: 1; }
-
-  /* Toast */
-  .toast {
-    position: fixed;
-    bottom: 32px;
-    right: 32px;
-    background: var(--surface2);
-    border: 1px solid var(--accent);
-    border-radius: 10px;
-    padding: 14px 20px;
-    font-size: 14px;
-    color: var(--accent);
-    z-index: 9999;
-    transform: translateY(80px);
-    opacity: 0;
-    transition: all 0.4s cubic-bezier(0.34,1.56,0.64,1);
-    font-family: var(--mono);
-  }
-
-  .toast.show { transform: translateY(0); opacity: 1; }
-
-  /* API Key input */
-  .api-key-section {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 16px;
-    margin-bottom: 20px;
-    display: flex;
-    gap: 12px;
-    align-items: center;
-  }
-
-  .api-key-section input {
-    flex: 1;
-    background: var(--bg);
-    border: 1px solid var(--border2);
-    border-radius: 6px;
-    padding: 9px 14px;
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 13px;
-  }
-
-  .api-key-section input:focus {
-    outline: none;
-    border-color: var(--accent);
-  }
-
-  .api-key-label {
-    font-size: 12px;
-    color: var(--muted);
-    font-family: var(--mono);
-    white-space: nowrap;
-  }
-
-  /* Missing alert */
-  .missing-alert {
-    background: rgba(255,95,126,0.06);
-    border: 1px solid rgba(255,95,126,0.25);
-    border-radius: 10px;
-    padding: 16px 20px;
-    margin-bottom: 20px;
-  }
-
-  .missing-title {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--danger);
-    margin-bottom: 10px;
-  }
-
-  .missing-list { list-style: none; }
-  .missing-list li {
-    font-size: 12px;
-    font-family: var(--mono);
-    color: var(--muted);
-    padding: 3px 0;
-  }
-
-  .tag {
-    font-size: 10px;
-    font-family: var(--mono);
-    padding: 2px 7px;
-    border-radius: 3px;
-    display: inline-block;
-  }
-
-  .tag-missing { background: rgba(255,95,126,0.15); color: var(--danger); }
-  .tag-slash { background: rgba(122,128,150,0.15); color: var(--muted); }
-
-  /* Responsive */
-  @media (max-width: 700px) {
-    .config-grid { grid-template-columns: 1fr; }
-    .steps { display: none; }
-  }
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@300;400;600;700&display=swap');
+:root{
+  --bg:#0d0f14;--surface:#161a24;--surface2:#1e2433;
+  --border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.16);
+  --accent:#4fffb0;--accent2:#00d4ff;--warn:#ffb347;--danger:#ff5f7e;
+  --text:#e8eaf0;--muted:#7a8096;
+  --mono:'DM Mono',monospace;--sans:'Sora',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;
+  background-image:linear-gradient(rgba(79,255,176,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(79,255,176,0.025) 1px,transparent 1px);
+  background-size:40px 40px;pointer-events:none;z-index:0;}
+
+.wrapper{position:relative;z-index:1;max-width:1200px;margin:0 auto;padding:0 24px 80px;}
+
+/* Header */
+header{display:flex;align-items:center;justify-content:space-between;padding:24px 0 28px;border-bottom:1px solid var(--border);margin-bottom:36px;}
+.logo{display:flex;align-items:baseline;gap:10px;}
+.logo-mark{font-family:var(--mono);font-size:11px;letter-spacing:3px;color:var(--accent);border:1px solid var(--accent);padding:3px 8px;border-radius:3px;}
+.logo h1{font-size:22px;font-weight:700;letter-spacing:-0.5px;}
+.phase-badge{font-family:var(--mono);font-size:11px;color:var(--muted);border:1px solid var(--border2);padding:4px 12px;border-radius:20px;}
+
+/* Steps */
+.steps{display:flex;align-items:center;margin-bottom:36px;}
+.step{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);white-space:nowrap;}
+.step.active{color:var(--accent);}
+.step.done{color:rgba(79,255,176,0.6);}
+.step-num{width:26px;height:26px;border-radius:50%;border:1px solid currentColor;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;flex-shrink:0;}
+.step.active .step-num{background:var(--accent);color:var(--bg);border-color:var(--accent);font-weight:700;}
+.step.done .step-num{background:rgba(79,255,176,0.12);border-color:rgba(79,255,176,0.4);color:var(--accent);}
+.step-line{flex:1;height:1px;background:var(--border);margin:0 10px;min-width:20px;}
+
+/* Panel */
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px 32px;margin-bottom:20px;display:none;animation:fadeUp 0.35s ease;}
+.panel.visible{display:block;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
+.panel-title{font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:18px;display:flex;align-items:center;gap:10px;}
+.panel-title::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:7px;padding:9px 20px;border-radius:7px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.18s;border:none;}
+.btn-primary{background:var(--accent);color:#0d0f14;}
+.btn-primary:hover{background:#3de89a;transform:translateY(-1px);}
+.btn-primary:disabled{opacity:0.35;cursor:not-allowed;transform:none;}
+.btn-outline{background:transparent;color:var(--text);border:1px solid var(--border2);}
+.btn-outline:hover{border-color:var(--text);background:rgba(255,255,255,0.04);}
+.btn-warn{background:transparent;color:var(--warn);border:1px solid var(--warn);}
+.btn-warn:hover{background:rgba(255,179,71,0.08);}
+.btn-excel{background:#1a6b34;color:#fff;}
+.btn-excel:hover{background:#228b43;transform:translateY(-1px);}
+
+/* Action bar */
+.action-bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding-top:18px;border-top:1px solid var(--border);margin-top:6px;}
+.spacer{flex:1;}
+
+/* ─── STAGE 1: API + Upload ─── */
+.api-row{display:flex;gap:10px;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:18px;}
+.api-label{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;letter-spacing:1px;}
+.api-row input{flex:1;background:var(--bg);border:1px solid var(--border2);border-radius:6px;padding:8px 12px;color:var(--text);font-family:var(--mono);font-size:13px;}
+.api-row input:focus{outline:none;border-color:var(--accent);}
+.api-status{font-family:var(--mono);font-size:12px;padding:4px 10px;border-radius:5px;white-space:nowrap;}
+.api-ok{color:var(--accent);background:rgba(79,255,176,0.1);border:1px solid rgba(79,255,176,0.3);}
+.api-fail{color:var(--danger);background:rgba(255,95,126,0.1);border:1px solid rgba(255,95,126,0.3);}
+
+.upload-zone{border:2px dashed var(--border2);border-radius:12px;padding:48px 40px;text-align:center;cursor:pointer;transition:all 0.3s;position:relative;}
+.upload-zone:hover,.upload-zone.dragging{border-color:var(--accent);background:rgba(79,255,176,0.03);}
+.upload-zone h3{font-size:17px;font-weight:600;margin:12px 0 6px;}
+.upload-zone p{font-size:13px;color:var(--muted);margin-bottom:18px;}
+#fileInput{display:none;}
+#previewWrap{margin-top:16px;display:none;}
+#previewImg{width:100%;max-height:400px;object-fit:contain;border-radius:10px;border:1px solid var(--border);}
+
+/* class name */
+.meta-row{display:flex;gap:12px;margin-bottom:18px;}
+.meta-field{flex:1;}
+.meta-field label{display:block;font-size:11px;font-family:var(--mono);color:var(--muted);letter-spacing:1px;margin-bottom:6px;}
+.meta-field input{width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:6px;padding:8px 12px;color:var(--text);font-family:var(--mono);font-size:13px;}
+.meta-field input:focus{outline:none;border-color:var(--accent);}
+
+/* ─── STAGE 2: Column Config ─── */
+.detected-cols{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;}
+.col-chip{background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 12px;font-size:12px;font-family:var(--mono);color:var(--text);}
+.col-chip.selected{background:rgba(79,255,176,0.1);border-color:var(--accent);color:var(--accent);}
+
+/* Scoring mode tabs */
+.mode-tabs{display:flex;gap:8px;margin-bottom:22px;}
+.mode-tab{flex:1;padding:10px;border:1px solid var(--border2);border-radius:8px;background:transparent;color:var(--muted);cursor:pointer;font-family:var(--sans);font-size:13px;font-weight:500;transition:all 0.2s;text-align:center;}
+.mode-tab.active{background:rgba(79,255,176,0.08);border-color:var(--accent);color:var(--accent);}
+
+/* Weight mode */
+.weight-editor{display:none;}
+.weight-editor.visible{display:block;}
+.weight-header{display:grid;grid-template-columns:1fr auto auto auto;gap:10px;align-items:center;padding:6px 12px;font-size:11px;font-family:var(--mono);color:var(--muted);}
+.col-weight-row{display:grid;grid-template-columns:1fr auto auto auto;gap:10px;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;}
+.col-weight-name{font-size:13px;color:var(--text);}
+.col-weight-input{width:62px;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:5px 8px;color:var(--accent);font-family:var(--mono);font-size:13px;text-align:center;}
+.col-weight-input:focus{outline:none;border-color:var(--accent);}
+.col-weight-pct{font-size:12px;color:var(--muted);font-family:var(--mono);}
+
+/* Circular progress */
+.circle-wrap{display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px;}
+.circle-svg{transform:rotate(-90deg);}
+.circle-bg{fill:none;stroke:var(--border2);stroke-width:8;}
+.circle-bar{fill:none;stroke-width:8;stroke-linecap:round;transition:stroke-dashoffset 0.4s,stroke 0.3s;}
+.circle-text{font-size:13px;font-family:var(--mono);fill:var(--text);dominant-baseline:middle;text-anchor:middle;}
+.circle-sub{font-size:10px;font-family:var(--mono);fill:var(--muted);dominant-baseline:middle;text-anchor:middle;}
+.weight-layout{display:flex;gap:20px;align-items:flex-start;}
+.weight-list{flex:1;}
+.circle-side{flex-shrink:0;width:130px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;}
+.circle-label{font-size:11px;font-family:var(--mono);color:var(--muted);text-align:center;padding:6px 0 0;letter-spacing:1px;}
+
+/* Text scoring mode */
+.text-mode{display:none;}
+.text-mode.visible{display:block;}
+.scoring-input{width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:12px 14px;color:var(--text);font-family:var(--sans);font-size:14px;resize:vertical;min-height:80px;}
+.scoring-input:focus{outline:none;border-color:var(--accent);}
+.scoring-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+.scoring-chip{background:var(--surface2);border:1px solid var(--border2);border-radius:5px;padding:4px 12px;font-size:12px;color:var(--muted);cursor:pointer;transition:all 0.2s;}
+.scoring-chip:hover{border-color:var(--accent);color:var(--accent);}
+
+/* Slash mode */
+.slash-row{display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:18px;}
+.slash-row label{font-size:13px;color:var(--text);}
+.slash-row select{background:var(--bg);border:1px solid var(--border2);border-radius:5px;padding:6px 10px;color:var(--text);font-family:var(--mono);font-size:12px;cursor:pointer;}
+.slash-row select:focus{outline:none;border-color:var(--accent);}
+
+/* ─── STAGE 3: Review table ─── */
+.review-outer{overflow-x:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:18px;max-width:100%;}
+table{border-collapse:collapse;font-size:11px;width:100%;table-layout:fixed;}
+th{background:var(--surface2);padding:7px 4px;text-align:center;font-family:var(--mono);font-size:10px;letter-spacing:0.5px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:sticky;top:0;z-index:2;}
+th.th-seat{width:36px;}
+th.th-name{width:62px;text-align:left;padding-left:8px;}
+th.th-score{width:48px;}
+th.th-total{width:54px;color:var(--accent);}
+td{padding:5px 3px;border-bottom:1px solid var(--border);text-align:center;vertical-align:middle;}
+td.td-seat{font-family:var(--mono);font-size:10px;color:var(--muted);width:36px;}
+td.td-name{text-align:left;padding-left:8px;font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:62px;}
+td.td-total{font-family:var(--mono);font-size:12px;color:var(--accent);font-weight:600;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:rgba(255,255,255,0.02);}
+
+.cell-input{width:100%;background:transparent;border:1px solid transparent;border-radius:3px;padding:3px 2px;color:var(--text);font-family:var(--mono);font-size:11px;text-align:center;transition:all 0.15s;}
+.cell-input:focus{outline:none;border-color:var(--accent);background:var(--bg);}
+.cell-input.warn{color:var(--warn);background:rgba(255,179,71,0.07);border-color:rgba(255,179,71,0.35);}
+.cell-input.danger{color:var(--danger);background:rgba(255,95,126,0.07);border-color:rgba(255,95,126,0.35);}
+.cell-input.slash{color:var(--muted);font-style:italic;}
+
+/* Flags & missing below table */
+.review-alerts{margin-top:16px;display:flex;flex-direction:column;gap:12px;}
+.alert-box{border-radius:9px;padding:14px 18px;}
+.alert-warn{background:rgba(255,179,71,0.06);border:1px solid rgba(255,179,71,0.22);}
+.alert-danger{background:rgba(255,95,126,0.06);border:1px solid rgba(255,95,126,0.22);}
+.alert-title{font-size:12px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:7px;}
+.alert-title.warn{color:var(--warn);}
+.alert-title.danger{color:var(--danger);}
+.alert-list{list-style:none;}
+.alert-list li{font-size:11px;font-family:var(--mono);color:var(--muted);padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04);display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
+.alert-list li:last-child{border-bottom:none;}
+.a-name{color:var(--text);font-weight:500;min-width:55px;}
+.a-col{color:var(--muted);}
+.a-val{color:var(--warn);font-family:var(--mono);}
+.a-conf{font-size:10px;color:var(--danger);}
+
+/* Loading */
+.loading-bar{height:3px;background:var(--border);border-radius:3px;overflow:hidden;margin:14px 0;}
+.loading-bar-inner{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:3px;animation:bar 1.4s ease-in-out infinite;}
+@keyframes bar{0%{width:0%;margin-left:0;}55%{width:65%;margin-left:15%;}100%{width:0%;margin-left:100%;}}
+.status-msg{font-family:var(--mono);font-size:13px;color:var(--accent);text-align:center;padding:10px;}
+#ocrLog{font-family:var(--mono);font-size:11px;color:var(--muted);padding:12px;background:var(--bg);border-radius:8px;min-height:90px;white-space:pre-wrap;max-height:240px;overflow-y:auto;}
+
+/* Toast */
+.toast{position:fixed;bottom:28px;right:28px;background:var(--surface2);border:1px solid var(--accent);border-radius:9px;padding:12px 18px;font-size:13px;color:var(--accent);z-index:9999;transform:translateY(70px);opacity:0;transition:all 0.38s cubic-bezier(0.34,1.56,0.64,1);font-family:var(--mono);}
+.toast.show{transform:translateY(0);opacity:1;}
+
+/* Legend */
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;padding:10px 14px;background:var(--surface2);border-radius:7px;border:1px solid var(--border);}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);}
+.ldot{width:8px;height:8px;border-radius:50%;}
+
+@media(max-width:700px){.steps{display:none;}.weight-layout{flex-direction:column;}.circle-side{width:100%;}}
 </style>
 </head>
 <body>
-
 <div class="wrapper">
-  <header>
-    <div class="logo">
-      <span class="logo-mark">AI</span>
-      <h1>GradeFlow</h1>
-    </div>
-    <span class="phase-badge">Phase 1 — OCR + Review + Export</span>
-  </header>
+<header>
+  <div class="logo"><span class="logo-mark">AI</span><h1>GradeFlow</h1></div>
+  <span class="phase-badge">Phase 1 — OCR + 設定 + 審閱 + 匯出</span>
+</header>
 
-  <!-- Steps -->
-  <div class="steps">
-    <div class="step active" id="s1"><div class="step-num">1</div><span>設定 & 上傳</span></div>
-    <div class="step-line"></div>
-    <div class="step" id="s2"><div class="step-num">2</div><span>辨識中</span></div>
-    <div class="step-line"></div>
-    <div class="step" id="s3"><div class="step-num">3</div><span>審閱 & 修正</span></div>
-    <div class="step-line"></div>
-    <div class="step" id="s4"><div class="step-num">4</div><span>匯出</span></div>
+<div class="steps">
+  <div class="step active" id="s1"><div class="step-num">1</div><span>API & 上傳</span></div>
+  <div class="step-line"></div>
+  <div class="step" id="s2"><div class="step-num">2</div><span>欄位 & 計分</span></div>
+  <div class="step-line"></div>
+  <div class="step" id="s3"><div class="step-num">3</div><span>辨識中</span></div>
+  <div class="step-line"></div>
+  <div class="step" id="s4"><div class="step-num">4</div><span>審閱 & 修正</span></div>
+</div>
+
+<!-- ══ STAGE 1: API Key + Upload ══ -->
+<div class="panel visible" id="panel1">
+  <div class="panel-title">Gemini API 金鑰</div>
+  <div class="api-row">
+    <span class="api-label">API KEY</span>
+    <input type="password" id="apiKeyInput" placeholder="貼上你的 Google Gemini API Key..." autocomplete="off"/>
+    <button class="btn btn-outline" onclick="testApiKey()">測試連線</button>
+    <span id="apiStatus" class="api-status" style="display:none;"></span>
   </div>
 
-  <!-- PANEL 1: Config + Upload -->
-  <div class="panel visible" id="panel1">
-    <div class="panel-title">Google Vision API 金鑰</div>
-
-    <div class="api-key-section">
-      <span class="api-key-label">API KEY</span>
-      <input type="password" id="apiKeyInput" placeholder="貼上你的 Google Cloud Vision API Key..." />
-      <button class="btn btn-outline" onclick="testApiKey()">測試連線</button>
-    </div>
-
-    <div class="panel-title">欄位設定</div>
-
-    <div class="config-grid">
-      <div class="config-card">
-        <label>班別名稱</label>
-        <input type="text" id="classNameInput" value="706" placeholder="如: 706, 8年A班" />
-      </div>
-      <div class="config-card">
-        <label>斜線格處理</label>
-        <select id="slashMode">
-          <option value="skip">視為免測（留空）</option>
-          <option value="zero">視為0分</option>
-          <option value="symbol">保留「/」符號</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="panel-title">科目欄位 & 加權設定</div>
-
-    <div class="col-editor">
-      <div id="colRows"></div>
-      <button class="add-col-btn" onclick="addColRow()">＋ 新增科目欄位</button>
-    </div>
-
-    <div style="margin-top:10px; font-size:12px; color:var(--muted); font-family:var(--mono);">
-      * 加權 0 = 不計入總分運算 ｜ 加權總和建議為 100
-    </div>
-
-    <div class="panel-title" style="margin-top:24px;">上傳成績表圖片</div>
-
-    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
-      <span class="upload-icon">📋</span>
-      <h3>拖放或點擊上傳成績表</h3>
-      <p>支援 JPG、PNG、PDF 截圖，建議清晰正面拍攝</p>
-      <button class="btn btn-outline" onclick="event.stopPropagation(); document.getElementById('fileInput').click()">選擇檔案</button>
-      <input type="file" id="fileInput" accept="image/*" onchange="handleFile(event)" />
-    </div>
-
-    <div id="previewWrap" style="display:none; margin-top:16px;">
-      <img id="previewImg" style="width:100%; border-radius:10px; border:1px solid var(--border);" />
-    </div>
-
-    <div class="action-bar">
-      <span style="font-size:13px; color:var(--muted);">設定欄位後再上傳圖片開始辨識</span>
-      <div class="spacer"></div>
-      <button class="btn btn-primary" id="startOcrBtn" onclick="startOCR()" disabled>
-        ⚡ 開始 AI 辨識
-      </button>
-    </div>
+  <div class="panel-title">班級資訊</div>
+  <div class="meta-row">
+    <div class="meta-field"><label>班別名稱</label><input type="text" id="classNameInput" value="706" placeholder="如: 706"/></div>
   </div>
 
-  <!-- PANEL 2: Loading -->
-  <div class="panel" id="panel2">
-    <div class="panel-title">Google Vision OCR 辨識中</div>
-    <div id="statusMsg" class="status-msg">正在上傳圖片至 Google Vision API...</div>
-    <div class="loading-bar"><div class="loading-bar-inner"></div></div>
-    <div id="ocrLog" style="font-family:var(--mono); font-size:12px; color:var(--muted); padding:10px; background:var(--bg); border-radius:8px; min-height:80px; white-space:pre-wrap;"></div>
+  <div class="panel-title">上傳成績表圖片</div>
+  <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+    <div style="font-size:44px;">📋</div>
+    <h3>拖放或點擊上傳成績表</h3>
+    <p>支援 JPG、PNG，建議清晰正面拍攝</p>
+    <button class="btn btn-outline" onclick="event.stopPropagation();document.getElementById('fileInput').click()">選擇檔案</button>
+    <input type="file" id="fileInput" accept="image/*" onchange="handleFile(event)"/>
   </div>
+  <div id="previewWrap"><img id="previewImg" alt="預覽"/></div>
 
-  <!-- PANEL 3: Review -->
-  <div class="panel" id="panel3">
-    <div class="panel-title">審閱 & 手動修正</div>
-
-    <!-- Flags: low confidence -->
-    <div class="flag-section" id="flagSection" style="display:none;">
-      <div class="flag-title">⚠ 低信心度欄位（請確認）</div>
-      <ul class="flag-list" id="flagList"></ul>
-    </div>
-
-    <!-- Missing alert -->
-    <div class="missing-alert" id="missingSection" style="display:none;">
-      <div class="missing-title">🔴 缺漏成績提醒</div>
-      <ul class="missing-list" id="missingList"></ul>
-    </div>
-
-    <div class="legend">
-      <div class="legend-item"><div class="legend-dot conf-high"></div>高信心度</div>
-      <div class="legend-item"><div class="legend-dot conf-mid"></div>中信心度（建議確認）</div>
-      <div class="legend-item"><div class="legend-dot conf-low"></div>低信心度（請修正）</div>
-      <div class="legend-item"><span class="tag tag-slash">／</span>免測/斜線</div>
-      <div class="legend-item"><span class="tag tag-missing">空</span>缺漏</div>
-    </div>
-
-    <div class="review-container">
-      <table id="reviewTable">
-        <thead id="reviewHead"></thead>
-        <tbody id="reviewBody"></tbody>
-      </table>
-    </div>
-
-    <div class="action-bar">
-      <button class="btn btn-outline" onclick="backToUpload()">← 重新上傳</button>
-      <div class="spacer"></div>
-      <button class="btn btn-warn" onclick="autoFillMissing()">🔧 自動補齊空格</button>
-      <button class="btn btn-excel" onclick="exportExcel()">📊 匯出 Excel</button>
-    </div>
-  </div>
-
-  <!-- PANEL 4: Done -->
-  <div class="panel" id="panel4">
-    <div style="text-align:center; padding:40px 0;">
-      <div style="font-size:56px; margin-bottom:16px;">✅</div>
-      <h2 style="font-size:22px; margin-bottom:8px;">Excel 已匯出完成</h2>
-      <p style="color:var(--muted); margin-bottom:32px; font-size:14px;">檔案已下載至你的裝置，包含所有成績資料及總分計算。</p>
-      <div style="display:flex; gap:12px; justify-content:center;">
-        <button class="btn btn-outline" onclick="backToUpload()">再辨識一份</button>
-        <button class="btn btn-primary" onclick="goReview()">回到審閱</button>
-      </div>
-    </div>
+  <div class="action-bar">
+    <span style="font-size:12px;color:var(--muted);" id="fileHint">尚未選擇圖片</span>
+    <div class="spacer"></div>
+    <button class="btn btn-primary" id="toStage2Btn" onclick="goStage2()" disabled>下一步：設定欄位 →</button>
   </div>
 </div>
 
+<!-- ══ STAGE 2: Column detection + Scoring config ══ -->
+<div class="panel" id="panel2">
+  <div class="panel-title">AI 偵測到的欄位</div>
+  <p style="font-size:12px;color:var(--muted);margin-bottom:12px;">以下為 AI 從圖片中判斷出的科目欄位，你可以在下方調整名稱與加權後繼續。</p>
+  <div class="detected-cols" id="detectedCols">
+    <span style="font-size:12px;color:var(--muted);font-family:var(--mono);">— 待辨識 —</span>
+  </div>
+
+  <div class="panel-title" style="margin-top:20px;">斜線格處理方式</div>
+  <div class="slash-row">
+    <label>表格中「/」符號代表：</label>
+    <select id="slashMode">
+      <option value="skip">免測 / 留空（不計分）</option>
+      <option value="zero">缺交（視為 0 分）</option>
+      <option value="symbol">保留符號「/」</option>
+    </select>
+  </div>
+
+  <div class="panel-title">計分方式</div>
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tabWeight" onclick="switchMode('weight')">📊 百分比加權</button>
+    <button class="mode-tab" id="tabText" onclick="switchMode('text')">✍️ 文字描述（AI 計算）</button>
+  </div>
+
+  <!-- Weight mode -->
+  <div class="weight-editor visible" id="weightEditor">
+    <div class="weight-layout">
+      <div class="weight-list">
+        <div class="weight-header"><span>科目名稱</span><span>加權 %</span><span></span><span></span></div>
+        <div id="weightRows"></div>
+      </div>
+      <div class="circle-side">
+        <p class="circle-label">TOTAL WEIGHT</p>
+        <div class="circle-wrap">
+          <svg class="circle-svg" width="90" height="90" viewBox="0 0 90 90">
+            <circle class="circle-bg" cx="45" cy="45" r="38"/>
+            <circle class="circle-bar" id="circleBar" cx="45" cy="45" r="38"
+              stroke-dasharray="238.76" stroke-dashoffset="238.76" stroke="var(--accent)"/>
+            <text class="circle-text" id="circleNum" x="45" y="43" transform="rotate(90,45,45)">0%</text>
+            <text class="circle-sub" x="45" y="56" transform="rotate(90,45,45)">/ 100</text>
+          </svg>
+        </div>
+        <p id="circleWarn" style="font-size:10px;font-family:var(--mono);color:var(--danger);text-align:center;padding:0 8px 8px;display:none;">超過 100%！</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Text mode -->
+  <div class="text-mode" id="textMode">
+    <p style="font-size:12px;color:var(--muted);margin-bottom:10px;">用自然語言描述你希望如何計算總分，AI 會自動套用。</p>
+    <textarea class="scoring-input" id="scoringText" placeholder="例如：取前4次成績中最高的3次平均，加上期中考佔30%、期末考佔30%，合計100分。"></textarea>
+    <div class="scoring-chips">
+      <span class="scoring-chip" onclick="appendChip('取所有成績加總平均')">取所有平均</span>
+      <span class="scoring-chip" onclick="appendChip('取最高的3次平均')">最高3次平均</span>
+      <span class="scoring-chip" onclick="appendChip('去掉最低1次後取平均')">去最低1次</span>
+      <span class="scoring-chip" onclick="appendChip('期中考佔30%、期末考佔30%、其餘各佔10%')">期中末30%</span>
+      <span class="scoring-chip" onclick="appendChip('只計算有成績的欄位，斜線不列入')">略過斜線格</span>
+    </div>
+  </div>
+
+  <div class="action-bar">
+    <button class="btn btn-outline" onclick="goStage1()">← 返回</button>
+    <div class="spacer"></div>
+    <button class="btn btn-primary" onclick="startOCR()">⚡ 開始辨識</button>
+  </div>
+</div>
+
+<!-- ══ STAGE 3: Loading ══ -->
+<div class="panel" id="panel3">
+  <div class="panel-title">Gemini AI 辨識中</div>
+  <div id="statusMsg" class="status-msg">準備中...</div>
+  <div class="loading-bar"><div class="loading-bar-inner"></div></div>
+  <div id="ocrLog"></div>
+</div>
+
+<!-- ══ STAGE 4: Review ══ -->
+<div class="panel" id="panel4">
+  <div class="panel-title">審閱 & 手動修正</div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="ldot" style="background:var(--accent)"></div>高信心度 ≥85%</div>
+    <div class="legend-item"><div class="ldot" style="background:var(--warn)"></div>中等 65–84%（建議確認）</div>
+    <div class="legend-item"><div class="ldot" style="background:var(--danger)"></div>低 &lt;65%（請修正）</div>
+    <div class="legend-item"><span style="font-size:10px;font-family:var(--mono);background:rgba(122,128,150,0.15);color:var(--muted);padding:1px 6px;border-radius:3px;">／</span>免測/斜線</div>
+  </div>
+
+  <div class="review-outer">
+    <table id="reviewTable">
+      <thead id="reviewHead"></thead>
+      <tbody id="reviewBody"></tbody>
+    </table>
+  </div>
+
+  <!-- Alerts BELOW table -->
+  <div class="review-alerts" id="reviewAlerts"></div>
+
+  <div class="action-bar">
+    <button class="btn btn-outline" onclick="goStage1()">← 重新上傳</button>
+    <div class="spacer"></div>
+    <button class="btn btn-warn" onclick="autoFill()">🔧 補齊空格為 0</button>
+    <button class="btn btn-excel" onclick="exportExcel()">📊 匯出 Excel</button>
+  </div>
+</div>
+
+</div><!-- /wrapper -->
 <div class="toast" id="toast"></div>
 
 <script>
-// ─── State ───────────────────────────────────────────────
-let uploadedFile = null;
+// ─── State ──────────────────────────────────────────────────────────
 let uploadedBase64 = '';
-let parsedData = []; // [{seat, name, scores:[], confs:[], total}]
-let columns = [];    // [{name, weight}]
+let uploadedMime = 'image/jpeg';
+let parsedData = [];
+let detectedColumns = [];
+let scoringMode = 'weight';
 
-// ─── Init default columns ─────────────────────────────────
-const defaultCols = [
-  {name:'第1次評量', weight:10},
-  {name:'第2次評量', weight:10},
-  {name:'第3次評量', weight:10},
-  {name:'第4次評量', weight:10},
-  {name:'期中考', weight:30},
-  {name:'期末考', weight:30},
-];
-defaultCols.forEach(c => addColRow(c.name, c.weight));
-
-function addColRow(name='', weight=10) {
-  const idx = document.getElementById('colRows').children.length + 1;
-  const row = document.createElement('div');
-  row.className = 'col-row';
-  row.dataset.idx = idx;
-  row.innerHTML = `
-    <span class="col-idx">#${String(idx).padStart(2,'0')}</span>
-    <input type="text" value="${name}" placeholder="科目名稱（如：期中考）" />
-    <span class="weight-label">加權</span>
-    <input type="number" min="0" max="100" value="${weight}" />
-    <span class="weight-label">%</span>
-    <button class="remove-btn" onclick="this.parentElement.remove(); reindexCols()">×</button>
-  `;
-  document.getElementById('colRows').appendChild(row);
+// ─── Stage 1 Navigation ─────────────────────────────────────────────
+const zone = document.getElementById('uploadZone');
+zone.addEventListener('dragover', e=>{e.preventDefault();zone.classList.add('dragging');});
+zone.addEventListener('dragleave', ()=>zone.classList.remove('dragging'));
+zone.addEventListener('drop', e=>{
+  e.preventDefault();zone.classList.remove('dragging');
+  const f=e.dataTransfer.files[0];
+  if(f&&f.type.startsWith('image/'))processFile(f);
+});
+function handleFile(e){const f=e.target.files[0];if(f)processFile(f);}
+function processFile(f){
+  uploadedMime=f.type||'image/jpeg';
+  const r=new FileReader();
+  r.onload=ev=>{
+    uploadedBase64=ev.target.result.split(',')[1];
+    document.getElementById('previewWrap').style.display='block';
+    document.getElementById('previewImg').src=ev.target.result;
+    document.getElementById('toStage2Btn').disabled=false;
+    document.getElementById('fileHint').textContent='✓ '+f.name;
+    showToast('圖片已載入');
+  };
+  r.readAsDataURL(f);
 }
 
-function reindexCols() {
-  document.querySelectorAll('.col-row').forEach((r, i) => {
-    r.querySelector('.col-idx').textContent = '#' + String(i+1).padStart(2,'0');
+// ─── API Test (Gemini) ──────────────────────────────────────────────
+async function testApiKey(){
+  const key=document.getElementById('apiKeyInput').value.trim();
+  if(!key){showToast('請先輸入 API Key');return;}
+  showToast('測試中...');
+  const st=document.getElementById('apiStatus');
+  st.style.display='none';
+  try{
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contents:[{parts:[{text:'Hello'}]}]})
+    });
+    const d=await res.json();
+    if(d.candidates){
+      st.textContent='✓ 有效';st.className='api-status api-ok';st.style.display='inline-block';
+      showToast('✅ Gemini API Key 有效！');
+    }else{
+      st.textContent='✗ 無效';st.className='api-status api-fail';st.style.display='inline-block';
+      showToast('❌ Key 無效：'+JSON.stringify(d.error||d));
+    }
+  }catch(e){
+    st.textContent='✗ 失敗';st.className='api-status api-fail';st.style.display='inline-block';
+    showToast('❌ 連線失敗：'+e.message);
+  }
+}
+
+// ─── Go to Stage 2: quick column scan ───────────────────────────────
+async function goStage2(){
+  const key=document.getElementById('apiKeyInput').value.trim();
+  if(!key){showToast('請先填入 Gemini API Key');return;}
+  if(!uploadedBase64){showToast('請先上傳圖片');return;}
+  setStep(2);show('panel2');
+  document.getElementById('detectedCols').innerHTML='<span style="font-size:12px;color:var(--muted);font-family:var(--mono);">偵測欄位中...</span>';
+  try{
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contents:[{parts:[
+        {inline_data:{mime_type:uploadedMime,data:uploadedBase64}},
+        {text:`請只看這張成績表圖片的標題列（第一行/標頭行），列出所有科目/考試欄位名稱（不含座號、姓名）。
+直接輸出 JSON，不含任何 Markdown 標記：{"columns":["欄位1","欄位2",...]}`}
+      ]}]})
+    });
+    const d=await res.json();
+    const txt=d.candidates?.[0]?.content?.parts?.[0]?.text||'{}';
+    const m=txt.match(/\{[\s\S]*\}/);
+    const parsed=JSON.parse(m?m[0]:'{"columns":[]}');
+    detectedColumns=(parsed.columns||[]).filter(c=>c&&c.trim());
+    if(detectedColumns.length===0){
+      // fallback: ask user to set manually
+      detectedColumns=['成績1','成績2','成績3'];
+    }
+    renderDetectedCols();
+    buildWeightRows();
+  }catch(e){
+    detectedColumns=['第1次','第2次','第3次','期中考','期末考'];
+    renderDetectedCols();buildWeightRows();
+    showToast('欄位自動偵測失敗，使用預設值');
+  }
+}
+
+function renderDetectedCols(){
+  const el=document.getElementById('detectedCols');
+  el.innerHTML=detectedColumns.map(c=>`<span class="col-chip selected">${c}</span>`).join('');
+}
+
+// ─── Weight editor ───────────────────────────────────────────────────
+function buildWeightRows(){
+  const container=document.getElementById('weightRows');
+  container.innerHTML='';
+  const n=detectedColumns.length;
+  const defW=n>0?Math.floor(100/n):10;
+  const rem=n>0?100-defW*(n-1):0;
+  detectedColumns.forEach((col,i)=>{
+    const row=document.createElement('div');
+    row.className='col-weight-row';
+    row.dataset.ci=i;
+    row.innerHTML=`
+      <input type="text" class="col-weight-name" value="${col}" placeholder="科目名稱"
+        style="background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:5px 8px;color:var(--text);font-size:13px;width:100%;" />
+      <input type="number" class="col-weight-input" min="0" max="100" value="${i===n-1?rem:defW}" oninput="updateCircle()" />
+      <span class="col-weight-pct">%</span>
+      <button style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0 3px;" onclick="removeWeightRow(this)" title="移除">×</button>`;
+    container.appendChild(row);
   });
+  updateCircle();
 }
 
-function getColumns() {
-  const rows = document.querySelectorAll('.col-row');
-  return Array.from(rows).map(r => ({
-    name: r.querySelectorAll('input')[0].value || '未命名',
-    weight: parseFloat(r.querySelectorAll('input')[1].value) || 0
+function removeWeightRow(btn){
+  btn.closest('.col-weight-row').remove();
+  updateCircle();
+}
+
+function updateCircle(){
+  const inputs=document.querySelectorAll('.col-weight-input');
+  let total=0;
+  inputs.forEach(inp=>{total+=parseFloat(inp.value)||0;});
+  total=Math.round(total);
+  const r=38,circ=2*Math.PI*r;
+  const pct=Math.min(total,120)/100;
+  const bar=document.getElementById('circleBar');
+  const num=document.getElementById('circleNum');
+  const warn=document.getElementById('circleWarn');
+  bar.style.strokeDashoffset=circ*(1-Math.min(pct,1));
+  bar.style.stroke=total>100?'var(--danger)':total===100?'var(--accent)':'var(--warn)';
+  num.textContent=total+'%';
+  num.style.fill=total>100?'var(--danger)':total===100?'var(--accent)':'var(--text)';
+  warn.style.display=total>100?'block':'none';
+  // Prevent exceeding 100 on last change
+  if(total>100){
+    // highlight the last changed input
+    inputs.forEach(inp=>{inp.style.borderColor=total>100?'var(--danger)':'';});
+  }else{
+    inputs.forEach(inp=>{inp.style.borderColor='';});
+  }
+}
+
+// ─── Scoring mode ────────────────────────────────────────────────────
+function switchMode(m){
+  scoringMode=m;
+  document.getElementById('tabWeight').classList.toggle('active',m==='weight');
+  document.getElementById('tabText').classList.toggle('active',m==='text');
+  document.getElementById('weightEditor').classList.toggle('visible',m==='weight');
+  document.getElementById('textMode').classList.toggle('visible',m==='text');
+}
+function appendChip(t){
+  const ta=document.getElementById('scoringText');
+  ta.value=(ta.value?ta.value+'\n':'')+t;
+}
+
+// ─── Get current columns from weight editor ──────────────────────────
+function getColumnsFromEditor(){
+  const rows=document.querySelectorAll('.col-weight-row');
+  return Array.from(rows).map(r=>({
+    name:r.querySelector('.col-weight-name').value||'未命名',
+    weight:parseFloat(r.querySelector('.col-weight-input').value)||0
   }));
 }
 
-// ─── Upload handling ──────────────────────────────────────
-const zone = document.getElementById('uploadZone');
-zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragging'); });
-zone.addEventListener('dragleave', () => zone.classList.remove('dragging'));
-zone.addEventListener('drop', e => {
-  e.preventDefault(); zone.classList.remove('dragging');
-  const f = e.dataTransfer.files[0];
-  if (f && f.type.startsWith('image/')) processFile(f);
-});
+// ─── OCR (Gemini multimodal) ─────────────────────────────────────────
+async function startOCR(){
+  // Validate weight sum
+  if(scoringMode==='weight'){
+    const cols=getColumnsFromEditor();
+    const sum=cols.reduce((s,c)=>s+c.weight,0);
+    if(Math.round(sum)>100){showToast('⚠ 加權總和超過100%，請調整後再繼續');return;}
+  }
+  const key=document.getElementById('apiKeyInput').value.trim();
+  if(!key){showToast('請先填入 Gemini API Key');return;}
+  setStep(3);show('panel3');
+  const log=document.getElementById('ocrLog');
+  const status=document.getElementById('statusMsg');
+  log.textContent='';
+  const logLine=t=>{log.textContent+=t+'\n';log.scrollTop=log.scrollHeight;};
 
-function handleFile(e) {
-  const f = e.target.files[0];
-  if (f) processFile(f);
-}
+  const columns=scoringMode==='weight'?getColumnsFromEditor():detectedColumns.map(n=>({name:n,weight:0}));
 
-function processFile(f) {
-  uploadedFile = f;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    uploadedBase64 = ev.target.result.split(',')[1];
-    document.getElementById('previewWrap').style.display = 'block';
-    document.getElementById('previewImg').src = ev.target.result;
-    document.getElementById('startOcrBtn').disabled = false;
-    showToast('圖片已載入，可以開始辨識 ✓');
-  };
-  reader.readAsDataURL(f);
-}
+  try{
+    status.textContent='正在將圖片送往 Gemini 進行多模態 AI 辨識...';
+    logLine('► Model: gemini-2.5-flash（多模態）');
+    logLine('► 欄位：'+columns.map((c,i)=>`${i+1}.${c.name}`).join('、'));
 
-// ─── API test (已更換為 Gemini 測試) ─────────────────────────
-async function testApiKey() {
-  const key = document.getElementById('apiKeyInput').value.trim();
-  if (!key) { showToast('請先輸入 API Key'); return; }
-  showToast('測試中...');
-  try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: "Hello" }] }]
-      })
-    });
-    const d = await res.json();
-    if (d.candidates) showToast('✅ Gemini API Key 有效！');
-    else showToast('❌ API Key 無效，請確認是否為 Gemini Key');
-  } catch(e) { showToast('❌ 連線失敗：' + e.message); }
-}
+    const promptText=`你是一個專業的成績表 OCR 解析器。
+請仔細辨識這張手寫成績表圖片中的每一列（每一位學生）與每一格數字。
 
-// ─── OCR (重構：直接使用 Gemini 進行多模態表格辨識) ───────────────────
-async function startOCR() {
-  const key = document.getElementById('apiKeyInput').value.trim();
-  if (!key) { showToast('請先填入 Gemini API Key'); return; }
-  if (!uploadedBase64) { showToast('請先上傳圖片'); return; }
+【欄位順序】：${columns.map((c,i)=>`${i+1}.${c.name}`).join('、')}
 
-  columns = getColumns();
-  setStep(2);
-  show('panel2');
+【重要規則】：
+1. 嚴格依照欄位順序填入 scores 陣列。
+2. 斜線「/」或「\\」代表免測/缺交，輸出 null。
+3. 完全空白格也輸出 null。
+4. 信心度評分原則（非常重要，請誠實評估）：
+   - 0.9–1.0：字跡非常清晰，完全確定
+   - 0.7–0.85：大致清晰，但有輕微模糊或可能是近似值
+   - 0.5–0.65：字跡模糊、有塗改、或數字難以確定（如100與100、90與9○）
+   - 0.3–0.45：非常模糊或幾乎看不清楚
+   請不要對所有格子都給高信心度，手寫表格必然有部分模糊格。
+5. 姓名完全無法辨識的列可略過。
 
-  const log = document.getElementById('ocrLog');
-  const status = document.getElementById('statusMsg');
-
-  log.textContent = '';
-  function logLine(t) { log.textContent += t + '\n'; }
-
-  try {
-    status.textContent = '正在將圖片送往 Gemini 進行多模態 AI 辨識...';
-    logLine('► 準備多模態要求 (Model: gemini-2.5-flash)');
-    logLine('► 欄位設定（按順序）：' + columns.map((c,i) => `${i+1}.${c.name}`).join('、'));
-
-    // 建立給 Gemini 的強大結構化 Prompt
-    const promptText = `你是一個專業的成績表 OCR 解析器與視覺語言模型。
-這裡有一張手寫的成績表圖片，請仔細辨識表格中的每一列（每一位學生）與每一格。
-
-【欄位設定（按順序）】：${columns.map((c,i) => `${i+1}.${c.name}`).join('、')}
-
-【解析與轉換規則】：
-1. 嚴格依照上面的欄位順序填入 scores 陣列中。
-2. 表格中的斜線「/」或「\\」代表免測或缺交，請一律輸出為 null。
-3. 如果某格完全是空白（缺漏），也請輸出為 null。
-4. 請判斷你對該格子數字辨識的信心度 (0.0 到 1.0)。如果字跡非常模糊、塗改或難以確定，請給予 0.4 到 0.6 的低信心度；看得很清晰的給予 0.9 到 1.0。
-5. 姓名格如果是完全無法辨識的空白雜訊，整列可略過。
-6. 請忽略照片可能存在的歪斜、反光與陰影。
-
-請嚴格遵循以下 JSON 輸出格式，不要包含任何 Markdown 標籤（如 \`\`\`json）：
+請嚴格只輸出 JSON，不含任何 Markdown 標記（不要 \`\`\`json）：
 {
-  "class": "${document.getElementById('classNameInput').value || '706'}",
-  "students": [
-    {
-      "seat": "座號數字 (字串或數字)",
-      "name": "學生姓名",
-      "scores": [第一個科目分數, 第二個科目分數, ...],
-      "confs": [第一個科目信心度, 第二個科目信心度, ...]
-    }
+  "class":"${document.getElementById('classNameInput').value||'班級'}",
+  "students":[
+    {"seat":"座號","name":"姓名","scores":[...],"confs":[...]}
   ]
 }`;
 
-    // 依據官方手冊 REST 格式構建請求
-    const requestBody = {
-      contents: [{
-        parts: [
-          {
-            inlineData: {
-              mimeType: uploadedFile.type || "image/jpeg",
-              data: uploadedBase64
-            }
-          },
-          {
-            text: promptText
-          }
-        ]
-      }],
-      // 強制要求模型輸出 JSON 格式
-      generationConfig: {
-        responseMimeType: "application/json"
-      }
-    };
-
-    logLine('► 正在傳送 Base64 影像與提示詞 (要求大小小於 20MB)...');
-    
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contents:[{parts:[
+        {inline_data:{mime_type:uploadedMime,data:uploadedBase64}},
+        {text:promptText}
+      ]}],
+      generationConfig:{temperature:0.1,topP:0.8}})
     });
-
-    const data = await res.json();
-
-    if (data.error) throw new Error(data.error.message);
-    if (!data.candidates || !data.candidates[0]) throw new Error('Gemini API 無回應，請檢查金鑰或配額。');
-
-    logLine('✓ Gemini 辨識完成！');
-    
-    // 取出 Gemini 回傳的純文字（因為設定了 responseMimeType，內容保證是 JSON 字串）
-    const rawJsonText = data.candidates[0].content.parts[0].text;
-    logLine('\n► 收到結構化數據：\n' + rawJsonText.substring(0, 500) + '...');
+    const data=await res.json();
+    if(data.error)throw new Error(data.error.message);
+    const rawTxt=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
+    logLine('✓ Gemini 回應完成（'+rawTxt.length+' chars）');
+    logLine('\n原始輸出前200字：\n'+rawTxt.substring(0,200)+'...');
 
     let parsed;
-    try {
-      parsed = JSON.parse(rawJsonText);
-    } catch(e) {
-      throw new Error('JSON 解析失敗，原始文字為：' + rawJsonText.substring(0, 100));
+    try{
+      const m=rawTxt.match(/\{[\s\S]*\}/);
+      parsed=JSON.parse(m?m[0]:rawTxt);
+    }catch(e){throw new Error('JSON 解析失敗：'+rawTxt.substring(0,120));}
+
+    parsedData=parsed.students||[];
+    logLine('\n✓ 解析完成，共 '+parsedData.length+' 位學生');
+
+    // If text mode, compute totals via Claude
+    if(scoringMode==='text'){
+      status.textContent='AI 計算自訂總分中...';
+      logLine('\n► 文字計分模式：呼叫 Claude AI 計算...');
+      await computeTextScoring(columns);
     }
 
-    parsedData = parsed.students || [];
-    logLine(`✓ 成功解析出 ${parsedData.length} 位學生的成績資料`);
+    status.textContent='✅ 辨識完成！';
+    setTimeout(()=>{
+      buildReviewTable(columns);
+      setStep(4);show('panel4');
+    },600);
 
-    status.textContent = '結構化對齊完成！';
-    setTimeout(() => {
-      buildReviewTable();
-      setStep(3);
-      show('panel3');
-    }, 800);
-
-  } catch(e) {
-    status.textContent = '❌ 發生錯誤';
-    logLine('\n錯誤訊息：' + e.message);
-    logLine('\n疑難排解建議：');
-    logLine('1. 請確認你的 API Key 是在「Google AI Studio」申請的，而非 GCP 內部的金鑰。');
-    logLine('2. 請確認上傳的圖片格式 (MIME 類型) 正常。');
-    logLine('3. 如果錯誤代碼為 429，代表超過了每分鐘 15 次的免費頻率限制，請稍等一分鐘再試。');
+  }catch(e){
+    status.textContent='❌ 發生錯誤';
+    logLine('\n錯誤：'+e.message);
+    logLine('\n請確認：\n1. Gemini API Key 正確且已啟用\n2. 圖片清晰\n3. 網路連線正常');
   }
 }
 
-// ─── Build review table ───────────────────────────────────
-function buildReviewTable() {
-  columns = getColumns();
-  const totalWeight = columns.reduce((s,c) => s + c.weight, 0);
+// ─── Text scoring via Claude ─────────────────────────────────────────
+async function computeTextScoring(columns){
+  const rule=document.getElementById('scoringText').value;
+  if(!rule)return;
+  try{
+    const input=parsedData.map(s=>({seat:s.seat,name:s.name,scores:s.scores}));
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2000,messages:[{
+        role:'user',
+        content:`依照以下規則計算每位學生的總分：\n${rule}\n\n欄位名稱（依序）：${columns.map(c=>c.name).join('、')}\n\n學生資料 JSON：${JSON.stringify(input)}\n\n請只輸出 JSON 陣列（不含 Markdown），格式：[{"seat":"...","total":數字},...]`
+      }]})
+    });
+    const d=await res.json();
+    const txt=d.content?.[0]?.text||'[]';
+    const m=txt.match(/\[[\s\S]*\]/);
+    const totals=JSON.parse(m?m[0]:'[]');
+    totals.forEach(t=>{
+      const stu=parsedData.find(s=>String(s.seat)===String(t.seat));
+      if(stu)stu._textTotal=t.total;
+    });
+  }catch(e){console.error('text scoring error',e);}
+}
 
-  // Header
-  const thead = document.getElementById('reviewHead');
-  thead.innerHTML = '';
-  const hr = document.createElement('tr');
-  hr.innerHTML = '<th>座號</th><th>姓名</th>' +
-    columns.map(c => `<th>${c.name}<br><span style="font-size:10px;color:var(--accent);font-weight:400">${c.weight}%</span></th>`).join('') +
-    '<th style="color:var(--accent)">總分</th>';
+// ─── Build Review Table ──────────────────────────────────────────────
+function buildReviewTable(columns){
+  const thead=document.getElementById('reviewHead');
+  const tbody=document.getElementById('reviewBody');
+  thead.innerHTML='';tbody.innerHTML='';
+  const alerts=document.getElementById('reviewAlerts');
+  alerts.innerHTML='';
+
+  // Head
+  const hr=document.createElement('tr');
+  hr.innerHTML=`<th class="th-seat">座號</th><th class="th-name">姓名</th>`+
+    columns.map(c=>`<th class="th-score" title="${c.name}${c.weight?'('+c.weight+'%)':''}">${c.name.length>4?c.name.slice(0,4)+'…':c.name}</th>`).join('')+
+    `<th class="th-total">總分</th>`;
   thead.appendChild(hr);
 
-  // Body
-  const tbody = document.getElementById('reviewBody');
-  tbody.innerHTML = '';
+  const flagItems=[];
+  const missingItems=[];
+  const slashMode=document.getElementById('slashMode').value;
 
-  const flags = [];
-  const missing = [];
-
-  parsedData.forEach((stu, si) => {
-    const tr = document.createElement('tr');
-    let totalScore = 0;
-    let totalWeightUsed = 0;
-
-    const cells = columns.map((col, ci) => {
-      const score = stu.scores ? stu.scores[ci] : null;
-      const conf = stu.confs ? (stu.confs[ci] || 0.8) : 0.8;
-
-      let cls = 'cell-input';
-      let confCls = 'conf-high';
-      let val = '';
-
-      if (score === null || score === undefined) {
-        // slash or missing
-        const mode = document.getElementById('slashMode').value;
-        if (mode === 'zero') {
-          val = '0';
-          cls += ' missing';
-          confCls = 'conf-low';
-        } else if (mode === 'symbol') {
-          val = '/';
-          cls += ' slash';
-          confCls = 'conf-high';
-        } else {
-          val = '';
-          cls += ' slash';
-          confCls = 'conf-high';
-        }
-      } else {
-        val = String(score);
-        if (conf < 0.6) { cls += ' low-conf'; confCls = 'conf-low'; }
-        else if (conf < 0.8) { cls += ' low-conf'; confCls = 'conf-mid'; }
-
-        const numVal = parseFloat(val);
-        if (!isNaN(numVal) && col.weight > 0) {
-          totalScore += numVal * col.weight / 100;
-          totalWeightUsed += col.weight;
-        }
+  parsedData.forEach((stu,si)=>{
+    const tr=document.createElement('tr');
+    let totalScore=0,weightUsed=0;
+    const cells=columns.map((col,ci)=>{
+      const raw=stu.scores?stu.scores[ci]:undefined;
+      const conf=stu.confs?(stu.confs[ci]??0.75):0.75;
+      let val='',cls='cell-input';
+      if(raw===null||raw===undefined){
+        if(slashMode==='zero'){val='0';cls+=' danger';}
+        else if(slashMode==='symbol'){val='/';cls+=' slash';}
+        else{val='';cls+=' slash';}
+      }else{
+        val=String(raw);
+        if(conf<0.65){cls+=' danger';}
+        else if(conf<0.85){cls+=' warn';}
+        const num=parseFloat(val);
+        if(!isNaN(num)&&col.weight>0){totalScore+=num*col.weight/100;weightUsed+=col.weight;}
       }
-
-      if (conf < 0.7 && score !== null) {
-        flags.push({name: stu.name, seat: stu.seat, col: col.name, score: val, conf: Math.round(conf*100)});
+      // Collect flags
+      if(conf<0.85&&raw!==null&&raw!==undefined){
+        flagItems.push({name:stu.name,seat:stu.seat,col:col.name,val,conf:Math.round(conf*100)});
       }
-
-      if ((score === null || score === undefined || val === '') && !isNaN(ci)) {
-        // only flag if non-slash by context
+      if((raw===null||raw===undefined)&&col.weight>0){
+        missingItems.push({name:stu.name,seat:stu.seat,col:col.name});
       }
-
-      return `<td style="position:relative">
-        <div class="conf-dot ${confCls}"></div>
-        <input class="${cls}" type="text" value="${val}"
-          data-si="${si}" data-ci="${ci}"
-          oninput="recalcRow(${si})" />
-      </td>`;
+      return `<td><input class="${cls}" type="text" value="${val}" data-si="${si}" data-ci="${ci}" oninput="recalcRow(${si})"/></td>`;
     });
-
-    // Recalc total properly
-    const totalEl = `<td class="total-col" id="total-${si}">${totalWeightUsed > 0 ? totalScore.toFixed(1) : '—'}</td>`;
-
-    tr.innerHTML = `<td style="font-family:var(--mono);font-size:12px;color:var(--muted)">${stu.seat || '—'}</td>
-      <td style="font-weight:500">${stu.name || '—'}</td>
-      ${cells.join('')}${totalEl}`;
+    const total=stu._textTotal!==undefined?stu._textTotal:(weightUsed>0?+totalScore.toFixed(1):'—');
+    tr.innerHTML=`<td class="td-seat">${stu.seat||'—'}</td><td class="td-name" title="${stu.name||''}">${stu.name||'—'}</td>`+cells.join('')+`<td class="td-total" id="total-${si}">${total}</td>`;
     tbody.appendChild(tr);
   });
 
-  // Flags
-  const flagSec = document.getElementById('flagSection');
-  const flagList = document.getElementById('flagList');
-  if (flags.length > 0) {
-    flagSec.style.display = 'block';
-    flagList.innerHTML = flags.map(f =>
-      `<li><span class="flag-name">${f.name}</span><span>${f.col}</span><span style="font-family:var(--mono);color:var(--warn)">${f.score}</span><span style="font-size:11px;color:var(--danger)">(信心度${f.conf}%)</span></li>`
-    ).join('');
-  } else {
-    flagSec.style.display = 'none';
+  // Alerts below table
+  if(flagItems.length>0){
+    const box=document.createElement('div');
+    box.className='alert-box alert-warn';
+    box.innerHTML=`<div class="alert-title warn">⚠ 低信心度，建議確認（共 ${flagItems.length} 格）</div>
+      <ul class="alert-list">${flagItems.slice(0,30).map(f=>
+        `<li><span class="a-name">${f.name}</span><span class="a-col">${f.col}</span><span class="a-val">${f.val}</span><span class="a-conf">信心度 ${f.conf}%</span></li>`
+      ).join('')}${flagItems.length>30?`<li style="color:var(--muted)">... 還有 ${flagItems.length-30} 筆</li>`:''}</ul>`;
+    alerts.appendChild(box);
   }
-
-  // Missing
-  const missSec = document.getElementById('missingSection');
-  const missList = document.getElementById('missingList');
-  const missingItems = [];
-  parsedData.forEach(stu => {
-    if (!stu.scores) return;
-    columns.forEach((col, ci) => {
-      const s = stu.scores[ci];
-      if (s === null || s === undefined || s === '') {
-        if (col.weight > 0) {
-          missingItems.push(`座號 ${stu.seat}（${stu.name}）—— ${col.name}`);
-        }
-      }
-    });
-  });
-
-  if (missingItems.length > 0) {
-    missSec.style.display = 'block';
-    missList.innerHTML = missingItems.map(m => `<li>${m} <span class="tag tag-missing">缺漏</span></li>`).join('');
-  } else {
-    missSec.style.display = 'none';
+  if(missingItems.length>0){
+    const box=document.createElement('div');
+    box.className='alert-box alert-danger';
+    box.innerHTML=`<div class="alert-title danger">🔴 缺漏成績（共 ${missingItems.length} 格）</div>
+      <ul class="alert-list">${missingItems.map(m=>
+        `<li><span class="a-name">${m.name}</span><span class="a-col">${m.col}</span><span style="font-size:10px;background:rgba(255,95,126,0.15);color:var(--danger);padding:1px 7px;border-radius:3px;">缺漏</span></li>`
+      ).join('')}</ul>`;
+    alerts.appendChild(box);
   }
 }
 
-function recalcRow(si) {
-  columns = getColumns();
-  const inputs = document.querySelectorAll(`input[data-si="${si}"]`);
-  let total = 0;
-  let wUsed = 0;
-  inputs.forEach((inp, ci) => {
-    const v = parseFloat(inp.value);
-    const w = columns[ci] ? columns[ci].weight : 0;
-    if (!isNaN(v) && w > 0) { total += v * w / 100; wUsed += w; }
+function recalcRow(si){
+  const columns=getColumnsFromEditor();
+  const inputs=document.querySelectorAll(`input[data-si="${si}"]`);
+  let total=0,wUsed=0;
+  inputs.forEach((inp,ci)=>{
+    const v=parseFloat(inp.value);
+    const w=columns[ci]?columns[ci].weight:0;
+    if(!isNaN(v)&&w>0){total+=v*w/100;wUsed+=w;}
   });
-  const el = document.getElementById(`total-${si}`);
-  if (el) el.textContent = wUsed > 0 ? total.toFixed(1) : '—';
+  const el=document.getElementById(`total-${si}`);
+  if(el)el.textContent=wUsed>0?total.toFixed(1):'—';
 }
 
-// ─── Export Excel ─────────────────────────────────────────
-function exportExcel() {
-  columns = getColumns();
-  const className = document.getElementById('classNameInput').value || '班級';
-
-  const header = ['座號', '姓名', ...columns.map(c => `${c.name}(${c.weight}%)`), '總分'];
-  const rows = [header];
-
-  parsedData.forEach((stu, si) => {
-    const inputs = document.querySelectorAll(`input[data-si="${si}"]`);
-    const scores = Array.from(inputs).map(inp => {
-      const v = inp.value.trim();
-      if (v === '' || v === '/') return v || '';
-      const n = parseFloat(v);
-      return isNaN(n) ? v : n;
-    });
-
-    let total = 0, wUsed = 0;
-    scores.forEach((s, ci) => {
-      const w = columns[ci] ? columns[ci].weight : 0;
-      if (typeof s === 'number' && w > 0) { total += s * w / 100; wUsed += w; }
-    });
-
-    rows.push([stu.seat || '', stu.name || '', ...scores, wUsed > 0 ? +total.toFixed(1) : '']);
+// ─── Auto fill ───────────────────────────────────────────────────────
+function autoFill(){
+  document.querySelectorAll('.cell-input.slash,.cell-input.danger').forEach(inp=>{
+    if(inp.value===''||inp.value==='/'){
+      inp.value='0';
+      inp.classList.remove('slash','danger');
+      recalcRow(parseInt(inp.dataset.si));
+    }
   });
+  showToast('空格已填入 0');
+}
 
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-
-  // Column widths
-  ws['!cols'] = [
-    {wch:6}, {wch:10},
-    ...columns.map(() => ({wch:12})),
-    {wch:8}
-  ];
-
-  XLSX.utils.book_append_sheet(wb, ws, className);
-  XLSX.writeFile(wb, `GradeFlow_${className}_${new Date().toISOString().slice(0,10)}.xlsx`);
-
-  setStep(4);
-  show('panel4');
+// ─── Export Excel ────────────────────────────────────────────────────
+function exportExcel(){
+  const columns=scoringMode==='weight'?getColumnsFromEditor():detectedColumns.map(n=>({name:n,weight:0}));
+  const className=document.getElementById('classNameInput').value||'班級';
+  const header=['座號','姓名',...columns.map(c=>c.name+(c.weight?` (${c.weight}%)`:'')),'總分'];
+  const rows=[header];
+  parsedData.forEach((stu,si)=>{
+    const inputs=document.querySelectorAll(`input[data-si="${si}"]`);
+    const scores=Array.from(inputs).map(inp=>{
+      const v=inp.value.trim();
+      if(v===''||v==='/')return '';
+      const n=parseFloat(v);return isNaN(n)?v:n;
+    });
+    const totalEl=document.getElementById(`total-${si}`);
+    const total=totalEl?totalEl.textContent:'';
+    rows.push([stu.seat||'',stu.name||'',...scores,isNaN(parseFloat(total))?'':+parseFloat(total).toFixed(1)]);
+  });
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=[{wch:5},{wch:9},...columns.map(()=>({wch:10})),{wch:7}];
+  XLSX.utils.book_append_sheet(wb,ws,className);
+  XLSX.writeFile(wb,`GradeFlow_${className}_${new Date().toISOString().slice(0,10)}.xlsx`);
   showToast('✅ Excel 已匯出！');
 }
 
-function autoFillMissing() {
-  document.querySelectorAll('.cell-input.missing').forEach(inp => {
-    inp.value = '0';
-    inp.classList.remove('missing');
-    inp.classList.add('low-conf');
-    const si = parseInt(inp.dataset.si);
-    recalcRow(si);
-  });
-  showToast('空格已自動填入 0，請確認後匯出');
-}
-
-// ─── Navigation ───────────────────────────────────────────
-function show(id) {
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('visible'));
-  document.getElementById(id).classList.add('visible');
-}
-
-function setStep(n) {
-  document.querySelectorAll('.step').forEach((s, i) => {
-    s.classList.remove('active','done');
-    if (i + 1 < n) s.classList.add('done');
-    if (i + 1 === n) s.classList.add('active');
-  });
-}
-
-function backToUpload() { setStep(1); show('panel1'); }
-function goReview() { setStep(3); show('panel3'); }
-
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 3000);
-}
+// ─── Navigation helpers ───────────────────────────────────────────────
+function show(id){document.querySelectorAll('.panel').forEach(p=>p.classList.remove('visible'));document.getElementById(id).classList.add('visible');}
+function setStep(n){document.querySelectorAll('.step').forEach((s,i)=>{s.classList.remove('active','done');if(i+1<n)s.classList.add('done');if(i+1===n)s.classList.add('active');});}
+function goStage1(){setStep(1);show('panel1');}
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
 </script>
 </body>
 </html>
